@@ -5,9 +5,10 @@ import PersonaSettings from "./components/PersonaSettings";
 import AdminPanel from "./components/AdminPanel";
 import { 
   Sparkles, BookOpen, User, MessageSquare, Key, Shield, 
-  Lock, ArrowRight, LogOut, CheckCircle, AlertCircle, Eye, Users
+  Lock, ArrowRight, LogOut, CheckCircle, AlertCircle, Eye, Users,
+  PanelLeft, Plus, Trash2, HelpCircle, X, ChevronDown, ChevronUp, UserCheck
 } from "lucide-react";
-import { Persona } from "./types";
+import { Persona, ChatSession } from "./types";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<"chat" | "transcripts" | "persona" | "admin">("chat");
@@ -24,6 +25,13 @@ export default function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
 
+  // Sidebar Open state (v0 style)
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
+
+  // Lifted Chat Sessions State
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+
   useEffect(() => {
     // Check local storage for persistent whitelisted session
     const savedEmail = localStorage.getItem("educator_clone_auth_email");
@@ -39,6 +47,24 @@ export default function App() {
       fetchPersona();
     }
   }, [isAuthenticated, personaUpdatedSignal]);
+
+  // Load chat sessions on authentication
+  useEffect(() => {
+    if (isAuthenticated) {
+      const savedSessions = localStorage.getItem("luma_chat_sessions");
+      if (savedSessions) {
+        try {
+          const parsed = JSON.parse(savedSessions);
+          setSessions(parsed);
+          if (parsed.length > 0) {
+            setActiveSessionId(parsed[0].id);
+          }
+        } catch (err) {
+          console.error("Failed to load past sessions", err);
+        }
+      }
+    }
+  }, [isAuthenticated]);
 
   const verifySavedEmail = async (email: string) => {
     try {
@@ -162,6 +188,49 @@ export default function App() {
     setPersonaUpdatedSignal((prev) => prev + 1);
   };
 
+  // Chat Sessions CRUD Handlers lifted to App level
+  const handleStartNewSession = () => {
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    const newSessionId = `session_${Date.now()}`;
+    const newSession: ChatSession = {
+      id: newSessionId,
+      title: `Consultation Thread #${sessions.length + 1}`,
+      messages: [],
+      category: "general",
+      timestamp: new Date().toLocaleDateString([], { month: "short", day: "numeric" })
+    };
+
+    const updated = [newSession, ...sessions];
+    setSessions(updated);
+    setActiveSessionId(newSessionId);
+    localStorage.setItem("luma_chat_sessions", JSON.stringify(updated));
+    setActiveTab("chat");
+  };
+
+  const handleSelectSession = (id: string) => {
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    setActiveSessionId(id);
+    setActiveTab("chat");
+  };
+
+  const handleDeleteSession = (idToDelete: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm("Are you sure you want to permanently delete this chat thread?")) return;
+    
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    const filtered = sessions.filter((s) => s.id !== idToDelete);
+    setSessions(filtered);
+    localStorage.setItem("luma_chat_sessions", JSON.stringify(filtered));
+
+    if (activeSessionId === idToDelete) {
+      if (filtered.length > 0) {
+        setActiveSessionId(filtered[0].id);
+      } else {
+        setActiveSessionId(null);
+      }
+    }
+  };
+
   // If loading authentication state, show minimal authoritative loading overlay
   if (checkingAuth) {
     return (
@@ -249,63 +318,75 @@ export default function App() {
               Simulated Secure Sandbox Wallet
             </button>
           </div>
-
-          
         </div>
       </div>
     );
   }
 
-  // Whitelisted authorized screen
+  // Whitelisted authorized screen with v0 Dashboard layout style
   return (
-    <div className="min-h-screen bg-stone-950 text-stone-200 flex flex-col selection:bg-blue-950/60 selection:text-stone-100" id="app-container">
-      {/* Top Professional Header */}
-      <header className="bg-stone-900 border-b border-stone-800 sticky top-0 z-40 shadow-xs" id="app-header">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            
-            {/* Logo */}
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-lg overflow-hidden bg-stone-950 flex items-center justify-center shadow-sm border border-stone-800">
-                <img src="/lumen_logo.svg" alt="LUMEN Logo" className="w-9 h-9 object-contain" referrerPolicy="no-referrer" />
-              </div>
-              <div>
-                <h1 className="font-serif text-sm font-extrabold tracking-tight text-stone-100 sm:text-base">
-                  LUMEN
-                </h1>
-                <p className="text-[9px] text-stone-400 font-medium tracking-wide uppercase">
-                  Classroom Wisdom &amp; Strategic Mentorship
-                </p>
+    <div className="min-h-screen bg-stone-950 text-stone-200 flex selection:bg-blue-950/60 selection:text-stone-100" id="app-container">
+      
+      {/* V0-STYLE MASTER COLLAPSIBLE LEFT SIDEBAR */}
+      {sidebarOpen && (
+        <aside className="w-64 bg-[#09090b] border-r border-stone-900 shrink-0 h-screen sticky top-0 flex flex-col justify-between z-40" id="master-app-sidebar">
+          
+          <div className="flex flex-col p-4.5 space-y-4 overflow-y-auto flex-1 select-none">
+            {/* Logo/Workspace selector */}
+            <div className="flex items-center justify-between pb-2 border-b border-stone-900">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg overflow-hidden bg-stone-950 flex items-center justify-center border border-stone-800">
+                  <img src="/lumen_logo.svg" alt="LUMEN Logo" className="w-7 h-7 object-contain" referrerPolicy="no-referrer" />
+                </div>
+                <div>
+                  <h1 className="font-serif text-sm font-extrabold tracking-tight text-stone-100">
+                    LUMEN
+                  </h1>
+                  <p className="text-[9px] text-stone-400 font-semibold uppercase tracking-wider">
+                    Companion {isAdmin ? "• Free" : "• Free"}
+                  </p>
+                </div>
               </div>
             </div>
 
-            {/* Navigation Tabs */}
-            <div className="flex items-center gap-3">
-              <nav className="flex space-x-1" id="main-navigation">
+            {/* "New Chat" Action Button */}
+            <button
+              onClick={handleStartNewSession}
+              className="w-full bg-[#18181b] hover:bg-[#27272a] border border-[#2d2d2d] hover:border-stone-600 text-stone-200 text-xs font-semibold py-2 px-3 rounded-lg transition text-center flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+            >
+              <Plus size={14} className="text-stone-400" />
+              New Chat
+            </button>
+
+            {/* Primary Sidebar Navigation Menu */}
+            <div className="space-y-1.5 pt-2">
+              <span className="text-[10px] font-bold text-stone-600 uppercase tracking-widest block px-1">Navigation</span>
+              
+              <nav className="space-y-1" id="main-navigation">
                 <button
                   id="nav-tab-chat"
                   onClick={() => setActiveTab("chat")}
-                  className={`px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition flex items-center gap-1.5 cursor-pointer ${
+                  className={`w-full px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition flex items-center gap-2.5 cursor-pointer text-left ${
                     activeTab === "chat"
-                      ? "bg-blue-500 text-stone-950 shadow-xs"
-                      : "text-stone-400 hover:text-stone-100 hover:bg-stone-800"
+                      ? "bg-stone-900 text-stone-100"
+                      : "text-stone-400 hover:text-stone-250 hover:bg-stone-900/40"
                   }`}
                 >
-                  <MessageSquare size={14} />
-                  <span className="hidden sm:inline">Consultation Hub</span>
+                  <MessageSquare size={14} className="text-stone-400" />
+                  <span>Consultation Hub</span>
                 </button>
 
                 <button
                   id="nav-tab-transcripts"
                   onClick={() => setActiveTab("transcripts")}
-                  className={`px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition flex items-center gap-1.5 cursor-pointer ${
+                  className={`w-full px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition flex items-center gap-2.5 cursor-pointer text-left ${
                     activeTab === "transcripts"
-                      ? "bg-blue-500 text-stone-950 shadow-xs"
-                      : "text-stone-400 hover:text-stone-100 hover:bg-stone-800"
+                      ? "bg-stone-900 text-stone-100"
+                      : "text-stone-400 hover:text-stone-250 hover:bg-stone-900/40"
                   }`}
                 >
-                  <BookOpen size={14} />
-                  <span className="hidden sm:inline">Class Materials</span>
+                  <BookOpen size={14} className="text-stone-400" />
+                  <span>Class Materials</span>
                 </button>
 
                 {isAdmin && (
@@ -313,99 +394,196 @@ export default function App() {
                     <button
                       id="nav-tab-persona"
                       onClick={() => setActiveTab("persona")}
-                      className={`px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition flex items-center gap-1.5 cursor-pointer ${
+                      className={`w-full px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition flex items-center gap-2.5 cursor-pointer text-left ${
                         activeTab === "persona"
-                          ? "bg-blue-500 text-stone-950 shadow-xs"
-                          : "text-stone-400 hover:text-stone-100 hover:bg-stone-800"
+                          ? "bg-stone-900 text-stone-100"
+                          : "text-stone-400 hover:text-stone-250 hover:bg-stone-900/40"
                       }`}
                     >
-                      <User size={14} />
-                      <span className="hidden sm:inline">Identity Studio</span>
+                      <User size={14} className="text-stone-400" />
+                      <span>Identity Studio</span>
                     </button>
 
                     <button
                       id="nav-tab-admin"
                       onClick={() => setActiveTab("admin")}
-                      className={`px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition flex items-center gap-1.5 cursor-pointer ${
+                      className={`w-full px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition flex items-center gap-2.5 cursor-pointer text-left ${
                         activeTab === "admin"
-                          ? "bg-blue-500 text-stone-950 shadow-xs"
-                          : "text-stone-400 hover:text-stone-100 hover:bg-stone-800"
+                          ? "bg-stone-900 text-stone-100"
+                          : "text-stone-400 hover:text-stone-250 hover:bg-stone-900/40"
                       }`}
                     >
-                      <Users size={14} />
-                      <span className="hidden sm:inline">Access Keys</span>
+                      <Users size={14} className="text-stone-400" />
+                      <span>Access Keys</span>
                     </button>
                   </>
                 )}
               </nav>
+            </div>
 
+            {/* Collapsible Recent Chats / Thread history list */}
+            <div className="space-y-1.5 pt-2 flex-1 overflow-y-auto max-h-[300px]">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[10px] font-bold text-stone-600 uppercase tracking-widest">Recent Chats</span>
+              </div>
+
+              <div className="space-y-1">
+                {sessions.length === 0 ? (
+                  <p className="text-[10px] text-stone-600 px-1 italic">No previous chats</p>
+                ) : (
+                  sessions.map((s) => {
+                    const isActive = s.id === activeSessionId && activeTab === "chat";
+                    return (
+                      <div
+                        key={s.id}
+                        onClick={() => handleSelectSession(s.id)}
+                        className={`group w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center justify-between transition cursor-pointer ${
+                          isActive
+                            ? "bg-stone-900 text-stone-100"
+                            : "text-stone-400 hover:text-stone-250 hover:bg-stone-900/40"
+                        }`}
+                      >
+                        <span className="truncate pr-1 select-none">{s.title}</span>
+                        <button
+                          onClick={(e) => handleDeleteSession(s.id, e)}
+                          className="p-1 rounded opacity-0 group-hover:opacity-100 transition hover:bg-stone-850 hover:text-rose-400 text-stone-500"
+                          title="Delete Thread"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom user settings section in Sidebar */}
+          <div className="p-4 border-t border-stone-900 bg-stone-950 flex flex-col gap-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 truncate">
+                <div className="w-7 h-7 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center font-bold text-xs text-blue-400 shrink-0">
+                  {userEmail ? userEmail.substring(0, 1).toUpperCase() : "U"}
+                </div>
+                <div className="truncate text-left">
+                  <p className="text-xs font-semibold text-stone-200 truncate">{userEmail || "Anonymous Scholar"}</p>
+                  <p className="text-[9px] text-stone-500 font-mono">{isAdmin ? "Administrator" : "Scholar"}</p>
+                </div>
+              </div>
               <button
                 onClick={handleLogout}
-                className="text-stone-400 hover:text-stone-100 hover:bg-stone-800 p-2 rounded-lg transition cursor-pointer"
-                title={`Authorized as ${userEmail} - Sign Out`}
+                className="text-stone-500 hover:text-stone-200 p-1.5 rounded hover:bg-stone-900 transition cursor-pointer"
+                title="Sign Out Session"
               >
-                <LogOut size={16} />
+                <LogOut size={13} />
               </button>
             </div>
-
           </div>
-        </div>
-      </header>
+        </aside>
+      )}
 
-      {/* Warning Alert banner if secrets are not set yet */}
-      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 mt-5" id="api-key-warning">
-        <div className="bg-stone-900 border border-stone-800 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-stone-300 shadow-xs">
-          <div className="flex items-start gap-2.5">
-            <span className="p-1 bg-blue-950/60 text-blue-500 rounded-lg shrink-0 mt-0.5">
-              <Shield size={14} />
-            </span>
-            <div>
-              <p className="font-semibold text-stone-100">Authorized Session Access: {userEmail}</p>
-              <p className="text-stone-400 mt-0.5">
-                {isAdmin 
-                  ? "Instructor Privilege granted. You have access to syllabus logs, identity tuning, and whitelist admin panels." 
-                  : "Student Access granted. Consult the AI clone with voice recordings or screenshot frame analyses."}
-              </p>
+      {/* MAIN WORKSPACE SECTION */}
+      <div className="flex-1 min-h-screen bg-[#0d0d0d] flex flex-col min-w-0" id="main-panel-view">
+        
+        {/* TOP COMPACT HEADER (v0 style) */}
+        <header className="bg-[#09090b] border-b border-stone-900 px-4 py-3 flex items-center justify-between z-30 sticky top-0" id="workspace-top-bar">
+          <div className="flex items-center gap-3">
+            {/* Sidebar toggle control */}
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="text-stone-400 hover:text-stone-200 p-1.5 hover:bg-stone-900 rounded-lg transition cursor-pointer shrink-0"
+              title={sidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
+            >
+              <PanelLeft size={16} />
+            </button>
+            
+            {/* Header Current Tab Context */}
+            <div className="flex items-center gap-2 select-none">
+              <span className="text-xs font-semibold text-stone-400">Workspace</span>
+              <span className="text-xs text-stone-600">/</span>
+              <span className="text-xs font-bold text-stone-100 uppercase tracking-wider">
+                {activeTab === "chat" && "Consultation Hub"}
+                {activeTab === "transcripts" && "Class Materials"}
+                {activeTab === "persona" && "Identity Studio"}
+                {activeTab === "admin" && "Access Keys"}
+              </span>
             </div>
           </div>
-          <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-400 uppercase tracking-wider shrink-0 bg-emerald-950/40 px-2.5 py-1 rounded-md border border-emerald-900/50">
-            Grade A Secure Connected <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 ml-1.5 animate-ping"></div>
+
+          {/* Right Header Utilities matching v0.dev */}
+          <div className="flex items-center gap-2.5">
+            <button className="hidden sm:inline-block px-3 py-1 text-xs rounded-lg border border-stone-800 text-stone-400 hover:text-stone-200 hover:bg-stone-900 transition cursor-pointer font-semibold">
+              Upgrade
+            </button>
+            <button className="hidden sm:inline-block px-3 py-1 text-xs rounded-lg border border-stone-800 text-stone-400 hover:text-stone-200 hover:bg-stone-900 transition cursor-pointer font-semibold">
+              Feedback
+            </button>
+            
+            {/* Sleek Credit Balance display mimicking v0 */}
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-stone-900 border border-stone-800 text-stone-400 font-mono text-[11px] font-bold select-none">
+              <Sparkles size={11} className="text-blue-500" />
+              <span>5.00</span>
+            </div>
+
+            {/* Profile circular avatar indicator */}
+            <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-stone-800 to-stone-700 flex items-center justify-center font-bold text-[10px] text-stone-200 border border-stone-800 shadow-xs select-none">
+              {userEmail ? userEmail.substring(0, 2).toUpperCase() : "LU"}
+            </div>
+          </div>
+        </header>
+
+        {/* Warning Alert banner if secrets are not set yet */}
+        <div className="px-6 py-3 bg-stone-900/20 border-b border-stone-900 select-none">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-stone-400">
+            <div className="flex items-center gap-2">
+              <span className="p-0.5 bg-blue-950/40 text-blue-400 rounded shrink-0">
+                <Shield size={12} />
+              </span>
+              <p className="font-semibold text-stone-300">Authorized Session Key: <span className="font-mono text-stone-400 text-[11px]">{userEmail}</span></p>
+            </div>
+            <p className="text-[11px] text-stone-500">
+              {isAdmin 
+                ? "Full administrative access to logs, identity parameters, and whitelisted emails." 
+                : "Active strategic session is safe and isolated in your local web sandbox."}
+            </p>
           </div>
         </div>
+
+        {/* Main Content Area */}
+        <main className="flex-1 flex flex-col w-full min-h-0" id="app-content-stage">
+          {activeTab === "chat" && (
+            <ChatInterface 
+              personaUpdatedSignal={personaUpdatedSignal} 
+              sessions={sessions}
+              setSessions={setSessions}
+              activeSessionId={activeSessionId}
+              setActiveSessionId={setActiveSessionId}
+              onStartNewSession={handleStartNewSession}
+            />
+          )}
+
+          {activeTab === "transcripts" && (
+            <div className="p-6 max-w-7xl w-full mx-auto">
+              <TranscriptsManager onUpdate={handlePersonaUpdated} isAdmin={isAdmin} currentEmail={userEmail} />
+            </div>
+          )}
+
+          {activeTab === "persona" && (
+            <div className="p-6 max-w-7xl w-full mx-auto">
+              <PersonaSettings onUpdate={handlePersonaUpdated} currentEmail={userEmail} />
+            </div>
+          )}
+
+          {activeTab === "admin" && (
+            <div className="p-6 max-w-7xl w-full mx-auto">
+              <AdminPanel currentEmail={userEmail} />
+            </div>
+          )}
+        </main>
+
       </div>
-
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6" id="app-content-stage">
-        {activeTab === "chat" && (
-          <ChatInterface personaUpdatedSignal={personaUpdatedSignal} />
-        )}
-
-        {activeTab === "transcripts" && (
-          <TranscriptsManager onUpdate={handlePersonaUpdated} isAdmin={isAdmin} currentEmail={userEmail} />
-        )}
-
-        {activeTab === "persona" && (
-          <PersonaSettings onUpdate={handlePersonaUpdated} currentEmail={userEmail} />
-        )}
-
-        {activeTab === "admin" && (
-          <AdminPanel currentEmail={userEmail} />
-        )}
-      </main>
-
-      {/* Minimal Footer */}
-      <footer className="bg-stone-900 border-t border-stone-800 py-6 mt-12 text-center text-xs text-stone-400" id="app-footer">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p>© 2026 Educator AI Clone Platform. Designed with desktop precision and fluid responsiveness.</p>
-          <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Live Consultation Proxy
-            </span>
-            <span className="text-stone-800">|</span>
-            <span className="hover:text-stone-300 cursor-pointer">Security Protocol & Sandbox Safe</span>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
+
