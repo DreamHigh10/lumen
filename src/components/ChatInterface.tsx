@@ -551,12 +551,27 @@ export default function ChatInterface({
               transition={{ duration: 0.4 }}
               className="flex-1 flex flex-col justify-center max-w-3xl mx-auto w-full py-12 space-y-8 select-none"
             >
-              <div className="text-center space-y-3">
-                <h2 className="text-3xl sm:text-4.5xl font-sans tracking-tight font-bold text-stone-100">
-                  What do you want to create?
-                </h2>
-                <p className="text-stone-500 text-sm max-w-md mx-auto font-medium">
-                  Start building with a single prompt. Access raw syllabus lessons, tune strategic parameters, or analyze schemas.
+              <div className="text-center space-y-5 flex flex-col items-center">
+                {/* On top of the glowing LUMEN title as the identity of the AI */}
+                <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden border-2 border-stone-850 shadow-[0_0_20px_rgba(244,63,94,0.15)] bg-stone-950 flex items-center justify-center relative group">
+                  <div className="absolute inset-0 bg-gradient-to-tr from-pink-500/10 via-purple-500/10 to-blue-500/10 opacity-60 animate-pulse" />
+                  <img 
+                    src="/John%20immage.jpg" 
+                    alt="LUMEN AI Cybernetic Identity" 
+                    className="w-full h-full object-cover relative z-10 filter brightness-110 contrast-105" 
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+
+                {/* Title with logo on Left Hand Side (LHS) removed, keeping only the title */}
+                <div className="flex items-center justify-center">
+                  <h1 className="text-5xl sm:text-7xl font-sans font-black tracking-widest uppercase select-none text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 via-indigo-500 via-blue-500 to-cyan-500 animate-pulse drop-shadow-[0_0_25px_rgba(168,85,247,0.7)] leading-none py-1">
+                    LUMEN
+                  </h1>
+                </div>
+
+                <p className="text-stone-300 text-sm max-w-lg mx-auto font-medium tracking-wide">
+                  "Clarity is created through action, not overthinking. Your alignment and strategic leap start here today."
                 </p>
               </div>
 

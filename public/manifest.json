@@ -4,9 +4,9 @@
   "description": "An interactive classroom companion and personal AI clone named LUMEN.",
   "icons": [
     {
-      "src": "/lumen_logo.svg",
+      "src": "/John%20immage.jpg",
       "sizes": "192x192 512x512",
-      "type": "image/svg+xml"
+      "type": "image/jpeg"
     }
   ],
   "start_url": "/",

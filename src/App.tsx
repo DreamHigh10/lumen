@@ -3,15 +3,17 @@ import ChatInterface from "./components/ChatInterface";
 import TranscriptsManager from "./components/TranscriptsManager";
 import PersonaSettings from "./components/PersonaSettings";
 import AdminPanel from "./components/AdminPanel";
+import OptimizationSuite from "./components/OptimizationSuite";
 import { 
   Sparkles, BookOpen, User, MessageSquare, Key, Shield, 
   Lock, ArrowRight, LogOut, CheckCircle, AlertCircle, Eye, Users,
-  PanelLeft, Plus, Trash2, HelpCircle, X, ChevronDown, ChevronUp, UserCheck
+  PanelLeft, Plus, Trash2, HelpCircle, X, ChevronDown, ChevronUp, UserCheck,
+  Globe
 } from "lucide-react";
 import { Persona, ChatSession } from "./types";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"chat" | "transcripts" | "persona" | "admin">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "transcripts" | "persona" | "admin" | "optimization">("chat");
   const [persona, setPersona] = useState<Persona | null>(null);
   const [personaUpdatedSignal, setPersonaUpdatedSignal] = useState(0);
 
@@ -255,7 +257,7 @@ export default function App() {
         <div className="relative w-full max-w-md bg-stone-900 border border-stone-800 shadow-2xl rounded-2xl p-8 space-y-6">
           <div className="text-center space-y-2">
             <div className="inline-flex w-16 h-16 rounded-2xl overflow-hidden bg-stone-950 border border-stone-800 items-center justify-center mb-2 shadow-inner">
-              <img src="/lumen_logo.svg" alt="LUMEN Logo" className="w-14 h-14 object-contain" referrerPolicy="no-referrer" />
+              <img src="/John%20immage.jpg" alt="LUMEN Logo" className="w-14 h-14 object-contain" referrerPolicy="no-referrer" />
             </div>
             <h2 className="font-serif text-2xl tracking-tight text-white font-bold">
               LUMEN
@@ -336,7 +338,7 @@ export default function App() {
             <div className="flex items-center justify-between pb-2 border-b border-stone-900">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg overflow-hidden bg-stone-950 flex items-center justify-center border border-stone-800">
-                  <img src="/lumen_logo.svg" alt="LUMEN Logo" className="w-7 h-7 object-contain" referrerPolicy="no-referrer" />
+                  <img src="/John%20immage.jpg" alt="LUMEN Logo" className="w-7 h-7 object-contain" referrerPolicy="no-referrer" />
                 </div>
                 <div>
                   <h1 className="font-serif text-sm font-extrabold tracking-tight text-stone-100">
@@ -387,6 +389,19 @@ export default function App() {
                 >
                   <BookOpen size={14} className="text-stone-400" />
                   <span>Class Materials</span>
+                </button>
+
+                <button
+                  id="nav-tab-optimization"
+                  onClick={() => setActiveTab("optimization")}
+                  className={`w-full px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition flex items-center gap-2.5 cursor-pointer text-left ${
+                    activeTab === "optimization"
+                      ? "bg-stone-900 text-stone-100"
+                      : "text-stone-400 hover:text-stone-250 hover:bg-stone-900/40"
+                  }`}
+                >
+                  <Globe size={14} className="text-stone-400" />
+                  <span>SEO / GEO / AEO Suite</span>
                 </button>
 
                 {isAdmin && (
@@ -505,6 +520,7 @@ export default function App() {
               <span className="text-xs font-bold text-stone-100 uppercase tracking-wider">
                 {activeTab === "chat" && "Consultation Hub"}
                 {activeTab === "transcripts" && "Class Materials"}
+                {activeTab === "optimization" && "SEO / GEO / AEO Suite"}
                 {activeTab === "persona" && "Identity Studio"}
                 {activeTab === "admin" && "Access Keys"}
               </span>
@@ -513,19 +529,6 @@ export default function App() {
 
           {/* Right Header Utilities matching v0.dev */}
           <div className="flex items-center gap-2.5">
-            <button className="hidden sm:inline-block px-3 py-1 text-xs rounded-lg border border-stone-800 text-stone-400 hover:text-stone-200 hover:bg-stone-900 transition cursor-pointer font-semibold">
-              Upgrade
-            </button>
-            <button className="hidden sm:inline-block px-3 py-1 text-xs rounded-lg border border-stone-800 text-stone-400 hover:text-stone-200 hover:bg-stone-900 transition cursor-pointer font-semibold">
-              Feedback
-            </button>
-            
-            {/* Sleek Credit Balance display mimicking v0 */}
-            <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-stone-900 border border-stone-800 text-stone-400 font-mono text-[11px] font-bold select-none">
-              <Sparkles size={11} className="text-blue-500" />
-              <span>5.00</span>
-            </div>
-
             {/* Profile circular avatar indicator */}
             <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-stone-800 to-stone-700 flex items-center justify-center font-bold text-[10px] text-stone-200 border border-stone-800 shadow-xs select-none">
               {userEmail ? userEmail.substring(0, 2).toUpperCase() : "LU"}
@@ -566,6 +569,12 @@ export default function App() {
           {activeTab === "transcripts" && (
             <div className="p-6 max-w-7xl w-full mx-auto">
               <TranscriptsManager onUpdate={handlePersonaUpdated} isAdmin={isAdmin} currentEmail={userEmail} />
+            </div>
+          )}
+
+          {activeTab === "optimization" && (
+            <div className="p-6 max-w-7xl w-full mx-auto">
+              <OptimizationSuite />
             </div>
           )}
 
