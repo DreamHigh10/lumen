@@ -261,8 +261,8 @@ export default function App() {
 
         <div className="relative w-full max-w-md bg-stone-900 border border-stone-800 shadow-2xl rounded-2xl p-8 space-y-6">
           <div className="text-center space-y-2">
-            <div className="inline-flex w-16 h-16 rounded-2xl overflow-hidden bg-stone-950 border border-stone-800 items-center justify-center mb-2 shadow-inner">
-              <img src="/John%20immage.jpg" alt="LUMEN Logo" className="w-14 h-14 object-contain" referrerPolicy="no-referrer" />
+            <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-b from-blue-500 to-blue-600 flex items-center justify-center font-bold text-stone-950 text-3xl shadow-[0_0_20px_rgba(59,130,246,0.3)] border border-blue-400/20 select-none mb-2">
+              Ω
             </div>
             <h2 className="font-serif text-2xl tracking-tight text-white font-bold">
               LUMEN
@@ -342,8 +342,8 @@ export default function App() {
             {/* Logo/Workspace selector */}
             <div className="flex items-center justify-between pb-2 border-b border-stone-900">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg overflow-hidden bg-stone-950 flex items-center justify-center border border-stone-800">
-                  <img src="/John%20immage.jpg" alt="LUMEN Logo" className="w-7 h-7 object-contain" referrerPolicy="no-referrer" />
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-b from-blue-500 to-blue-600 flex items-center justify-center font-bold text-stone-950 text-base shadow-[0_0_10px_rgba(59,130,246,0.3)] border border-blue-400/20 select-none shrink-0">
+                  Ω
                 </div>
                 <div>
                   <h1 className="font-serif text-sm font-extrabold tracking-tight text-stone-100">

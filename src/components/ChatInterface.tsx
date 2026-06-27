@@ -554,14 +554,8 @@ export default function ChatInterface({
             >
               <div className="text-center space-y-5 flex flex-col items-center">
                 {/* On top of the glowing LUMEN title as the identity of the AI */}
-                <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden border-2 border-stone-850 shadow-[0_0_20px_rgba(244,63,94,0.15)] bg-stone-950 flex items-center justify-center relative group">
-                  <div className="absolute inset-0 bg-gradient-to-tr from-pink-500/10 via-purple-500/10 to-blue-500/10 opacity-60 animate-pulse" />
-                  <img 
-                    src="/John%20immage.jpg" 
-                    alt="LUMEN AI Cybernetic Identity" 
-                    className="w-full h-full object-cover relative z-10 filter brightness-110 contrast-105" 
-                    referrerPolicy="no-referrer"
-                  />
+                <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-gradient-to-b from-blue-500 to-blue-600 flex items-center justify-center font-bold text-stone-950 text-5xl shadow-[0_0_35px_rgba(59,130,246,0.4)] border-2 border-blue-400/30 select-none group">
+                  Ω
                 </div>
 
                 {/* Title with logo on Left Hand Side (LHS) removed, keeping only the title */}

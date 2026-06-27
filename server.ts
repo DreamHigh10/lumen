@@ -465,7 +465,10 @@ Ensure that the JSON is valid, fully escapes quote marks, and contains no traili
   });
 
   // Vite development middleware vs Static Production bundle
-  if (process.env.NODE_ENV !== "production") {
+  const isProduction = process.env.NODE_ENV === "production" || 
+                       (process.env.NODE_ENV !== "development" && fs.existsSync(path.join(process.cwd(), "dist/index.html")));
+
+  if (!isProduction) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
