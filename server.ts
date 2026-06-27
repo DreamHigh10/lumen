@@ -131,10 +131,19 @@ let allowedEmails = readJsonFile<string[]>(EMAILS_FILE, DEFAULT_EMAILS);
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+  const verifyAdmin = (req: express.Request, res: express.Response): boolean => {
+    const adminEmail = req.headers["x-admin-email"];
+    if (adminEmail !== "ogungbadekehinde19@gmail.com") {
+      res.status(403).json({ error: "Access denied. Only the primary administrator is permitted to perform this action." });
+      return false;
+    }
+    return true;
+  };
 
   // API - Transcripts
   app.get("/api/transcripts", (req, res) => {
@@ -142,6 +151,7 @@ async function startServer() {
   });
 
   app.post("/api/transcripts", (req, res) => {
+    if (!verifyAdmin(req, res)) return;
     const { title, content, tags, date } = req.body;
     if (!title || !content) {
       res.status(400).json({ error: "Title and content are required." });
@@ -161,6 +171,7 @@ async function startServer() {
   });
 
   app.delete("/api/transcripts/:id", (req, res) => {
+    if (!verifyAdmin(req, res)) return;
     const { id } = req.params;
     transcripts = transcripts.filter((t) => t.id !== id);
     writeJsonFile(TRANSCRIPTS_FILE, transcripts);
@@ -173,6 +184,7 @@ async function startServer() {
   });
 
   app.post("/api/persona", (req, res) => {
+    if (!verifyAdmin(req, res)) return;
     const updatedPersona: Persona = req.body;
     if (!updatedPersona.name || !updatedPersona.title) {
       res.status(400).json({ error: "Name and Title are required." });
@@ -185,10 +197,12 @@ async function startServer() {
 
   // API - Authorized Emails (Whitelist)
   app.get("/api/emails", (req, res) => {
+    if (!verifyAdmin(req, res)) return;
     res.json(allowedEmails);
   });
 
   app.post("/api/emails", (req, res) => {
+    if (!verifyAdmin(req, res)) return;
     const { email } = req.body;
     if (!email || typeof email !== "string") {
       res.status(400).json({ error: "Invalid email address." });
@@ -203,6 +217,7 @@ async function startServer() {
   });
 
   app.delete("/api/emails/:email", (req, res) => {
+    if (!verifyAdmin(req, res)) return;
     const { email } = req.params;
     const normalized = email.trim().toLowerCase();
     allowedEmails = allowedEmails.filter((e) => e !== normalized);
@@ -222,7 +237,7 @@ async function startServer() {
     res.json({
       success: isAllowed,
       email: normalized,
-      isAdmin: normalized === "ogungbadekehinde19@gmail.com" || normalized === "kehinde@test.com" || normalized === "admin@test.com"
+      isAdmin: normalized === "ogungbadekehinde19@gmail.com"
     });
   });
 

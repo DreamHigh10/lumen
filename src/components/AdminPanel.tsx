@@ -20,7 +20,9 @@ export default function AdminPanel({ currentEmail }: AdminPanelProps) {
   const fetchEmails = async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/emails");
+      const res = await fetch("/api/emails", {
+        headers: { "X-Admin-Email": currentEmail }
+      });
       if (!res.ok) throw new Error("Could not retrieve whitelisted emails.");
       const data = await res.json();
       setEmails(data);
@@ -40,7 +42,10 @@ export default function AdminPanel({ currentEmail }: AdminPanelProps) {
       setSuccessMessage(null);
       const res = await fetch("/api/emails", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "X-Admin-Email": currentEmail
+        },
         body: JSON.stringify({ email: newEmail }),
       });
 
@@ -67,6 +72,7 @@ export default function AdminPanel({ currentEmail }: AdminPanelProps) {
       setSuccessMessage(null);
       const res = await fetch(`/api/emails/${encodeURIComponent(emailToDelete)}`, {
         method: "DELETE",
+        headers: { "X-Admin-Email": currentEmail }
       });
 
       if (!res.ok) throw new Error("Failed to revoke access.");

@@ -250,15 +250,7 @@ export default function App() {
             </button>
           </div>
 
-
-
-          <div className="pt-4 border-t border-stone-800 text-center space-y-2">
-            <p className="text-[10px] text-stone-500 leading-relaxed font-sans">
-              To preview authorized states, test with whitelisted credentials: <br />
-              <strong className="text-stone-400 font-mono">ogungbadekehinde19@gmail.com</strong> (Educator Mode) <br />
-              or <strong className="text-stone-400 font-mono">student@test.com</strong> (Classmate Mode)
-            </p>
-          </div>
+          
         </div>
       </div>
     );
@@ -389,11 +381,11 @@ export default function App() {
         )}
 
         {activeTab === "transcripts" && (
-          <TranscriptsManager onUpdate={handlePersonaUpdated} />
+          <TranscriptsManager onUpdate={handlePersonaUpdated} isAdmin={isAdmin} currentEmail={userEmail} />
         )}
 
         {activeTab === "persona" && (
-          <PersonaSettings onUpdate={handlePersonaUpdated} />
+          <PersonaSettings onUpdate={handlePersonaUpdated} currentEmail={userEmail} />
         )}
 
         {activeTab === "admin" && (

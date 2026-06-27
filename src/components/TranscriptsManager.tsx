@@ -5,9 +5,11 @@ import { motion, AnimatePresence } from "motion/react";
 
 interface TranscriptsManagerProps {
   onUpdate: () => void;
+  isAdmin: boolean;
+  currentEmail: string;
 }
 
-export default function TranscriptsManager({ onUpdate }: TranscriptsManagerProps) {
+export default function TranscriptsManager({ onUpdate, isAdmin, currentEmail }: TranscriptsManagerProps) {
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +62,10 @@ export default function TranscriptsManager({ onUpdate }: TranscriptsManagerProps
 
       const res = await fetch("/api/transcripts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "X-Admin-Email": currentEmail
+        },
         body: JSON.stringify({ title, content, date, tags }),
       });
 
@@ -85,7 +90,10 @@ export default function TranscriptsManager({ onUpdate }: TranscriptsManagerProps
 
     try {
       setError(null);
-      const res = await fetch(`/api/transcripts/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/transcripts/${id}`, { 
+        method: "DELETE",
+        headers: { "X-Admin-Email": currentEmail }
+      });
       if (!res.ok) throw new Error("Could not delete transcript.");
       
       setTranscripts((prev) => prev.filter((t) => t.id !== id));
@@ -156,16 +164,20 @@ export default function TranscriptsManager({ onUpdate }: TranscriptsManagerProps
             Classroom Transcripts Hub
           </h2>
           <p className="text-xs text-stone-400 mt-1">
-            Feed the AI Clone your class transcripts. It will ground its responses and wisdom in what you've taught.
+            {isAdmin 
+              ? "Feed the AI Clone your class transcripts. It will ground its responses and wisdom in what you've taught."
+              : "Review the lectures, classes, and materials that ground your AI clone's guidance and strategic answers."}
           </p>
         </div>
-        <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          className="bg-blue-500 hover:bg-blue-400 text-stone-950 font-bold px-4 py-2 rounded-lg text-xs flex items-center gap-1.5 transition cursor-pointer self-start sm:self-center"
-        >
-          {showAddForm ? "View All Classes" : "Upload New Class"}
-          <Plus size={16} />
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
+            className="bg-blue-500 hover:bg-blue-400 text-stone-950 font-bold px-4 py-2 rounded-lg text-xs flex items-center gap-1.5 transition cursor-pointer self-start sm:self-center"
+          >
+            {showAddForm ? "View All Classes" : "Upload New Class"}
+            <Plus size={16} />
+          </button>
+        )}
       </div>
 
       {error && (
@@ -352,16 +364,18 @@ export default function TranscriptsManager({ onUpdate }: TranscriptsManagerProps
                     </div>
 
                     <div className="flex items-center gap-3">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(t.id, t.title);
-                        }}
-                        className="text-stone-500 hover:text-rose-400 p-1.5 rounded-md hover:bg-rose-950/40 transition cursor-pointer"
-                        title="Delete Class Memory"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(t.id, t.title);
+                          }}
+                          className="text-stone-500 hover:text-rose-400 p-1.5 rounded-md hover:bg-rose-950/40 transition cursor-pointer"
+                          title="Delete Class Memory"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
                       <span className="text-stone-400">
                         {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                       </span>

@@ -5,9 +5,10 @@ import { motion } from "motion/react";
 
 interface PersonaSettingsProps {
   onUpdate: () => void;
+  currentEmail: string;
 }
 
-export default function PersonaSettings({ onUpdate }: PersonaSettingsProps) {
+export default function PersonaSettings({ onUpdate, currentEmail }: PersonaSettingsProps) {
   const [persona, setPersona] = useState<Persona | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -47,7 +48,10 @@ export default function PersonaSettings({ onUpdate }: PersonaSettingsProps) {
 
       const res = await fetch("/api/persona", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "X-Admin-Email": currentEmail
+        },
         body: JSON.stringify(persona),
       });
 
