@@ -129,6 +129,57 @@ let transcripts = readJsonFile<Transcript[]>(TRANSCRIPTS_FILE, DEFAULT_TRANSCRIP
 let persona = readJsonFile<Persona>(PERSONA_FILE, DEFAULT_PERSONA);
 let allowedEmails = readJsonFile<string[]>(EMAILS_FILE, DEFAULT_EMAILS);
 
+// Robust Gemini content generation helper with transient-error retry and model fallback
+async function generateContentWithRetry(ai: any, params: { model: string; contents: any; config?: any }) {
+  const modelsToTry = [params.model, "gemini-flash-latest", "gemini-3.5-flash"];
+  // Deduplicate and filter out undefined or falsy
+  const uniqueModels = Array.from(new Set(modelsToTry.filter(Boolean)));
+  
+  let lastError: any = null;
+  
+  for (const model of uniqueModels) {
+    let attempts = 3;
+    let delay = 1000; // start with 1s delay
+    
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        console.log(`[LUMEN API] Attempting generateContent using model: ${model} (attempt ${attempt}/${attempts})`);
+        const response = await ai.models.generateContent({
+          ...params,
+          model: model,
+        });
+        return response;
+      } catch (err: any) {
+        lastError = err;
+        const errStr = String(err.message || err);
+        console.error(`[LUMEN API] Error with model ${model} (attempt ${attempt}/${attempts}):`, errStr);
+        
+        // Determine if error status or message suggests a transient issue (503, 429, high demand)
+        const status = err.status || (err.error && err.error.code);
+        const isTransient = status === 503 || status === 429 || !status || 
+                            errStr.includes("UNAVAILABLE") || 
+                            errStr.includes("demand") || 
+                            errStr.includes("limit") ||
+                            errStr.includes("overloaded");
+        
+        if (!isTransient) {
+          // If it's a structural or validation error (e.g., bad parameter / prompt), don't waste time retrying;
+          // directly proceed to fallback model or bubble up the error.
+          break;
+        }
+        
+        if (attempt < attempts) {
+          console.log(`[LUMEN API] Transient error. Retrying in ${delay}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          delay *= 2; // exponential backoff
+        }
+      }
+    }
+  }
+  
+  throw lastError || new Error("Failed to generate content after trying multiple models and retrying.");
+}
+
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
@@ -331,8 +382,8 @@ CRITICAL CHAT RULES:
         };
       });
 
-      // Call Gemini API
-      const response = await ai.models.generateContent({
+      // Call Gemini API with robust retry and fallback
+      const response = await generateContentWithRetry(ai, {
         model: "gemini-3.5-flash",
         contents: contents,
         config: {
@@ -413,7 +464,7 @@ Please provide a highly structured analysis in JSON format ONLY. Do not enclose 
 Ensure that the JSON is valid, fully escapes quote marks, and contains no trailing commas.
 `;
 
-      const response = await ai.models.generateContent({
+      const response = await generateContentWithRetry(ai, {
         model: "gemini-3.5-flash",
         contents: prompt,
         config: {

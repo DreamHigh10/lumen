@@ -261,8 +261,17 @@ export default function App() {
 
         <div className="relative w-full max-w-md bg-stone-900 border border-stone-800 shadow-2xl rounded-2xl p-8 space-y-6">
           <div className="text-center space-y-2">
-            <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-b from-blue-500 to-blue-600 flex items-center justify-center font-bold text-stone-950 text-3xl shadow-[0_0_20px_rgba(59,130,246,0.3)] border border-blue-400/20 select-none mb-2">
-              Ω
+            <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-b from-blue-500 to-blue-600 flex items-center justify-center font-bold text-stone-950 text-3xl shadow-[0_0_20px_rgba(59,130,246,0.3)] border border-blue-400/20 select-none mb-2 overflow-hidden">
+              <img 
+                src="/John%20immage.jpg" 
+                alt="LUMEN Logo" 
+                className="absolute inset-0 w-full h-full object-cover z-20" 
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.opacity = '0';
+                }}
+              />
+              <span className="relative z-10">Ω</span>
             </div>
             <h2 className="font-serif text-2xl tracking-tight text-white font-bold">
               LUMEN
@@ -342,8 +351,17 @@ export default function App() {
             {/* Logo/Workspace selector */}
             <div className="flex items-center justify-between pb-2 border-b border-stone-900">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-b from-blue-500 to-blue-600 flex items-center justify-center font-bold text-stone-950 text-base shadow-[0_0_10px_rgba(59,130,246,0.3)] border border-blue-400/20 select-none shrink-0">
-                  Ω
+                <div className="relative w-8 h-8 rounded-lg bg-gradient-to-b from-blue-500 to-blue-600 flex items-center justify-center font-bold text-stone-950 text-base shadow-[0_0_10px_rgba(59,130,246,0.3)] border border-blue-400/20 select-none shrink-0 overflow-hidden">
+                  <img 
+                    src="/John%20immage.jpg" 
+                    alt="LUMEN Logo" 
+                    className="absolute inset-0 w-full h-full object-cover z-20" 
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.opacity = '0';
+                    }}
+                  />
+                  <span className="relative z-10 text-xs">Ω</span>
                 </div>
                 <div>
                   <h1 className="font-serif text-sm font-extrabold tracking-tight text-stone-100">
