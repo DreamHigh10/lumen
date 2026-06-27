@@ -61,7 +61,8 @@ export default function ChatInterface({
       setMessages([]);
       setCategory("general");
     }
-  }, [activeSessionId, sessions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessionId]);
 
   // Sync current active messages back to local storage whenever they change
   useEffect(() => {

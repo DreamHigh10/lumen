@@ -57,12 +57,17 @@ export default function App() {
       if (savedSessions) {
         try {
           const parsed = JSON.parse(savedSessions);
-          setSessions(parsed);
-          if (parsed.length > 0) {
-            setActiveSessionId(parsed[0].id);
+          if (Array.isArray(parsed)) {
+            setSessions(parsed);
+            if (parsed.length > 0) {
+              setActiveSessionId(parsed[0].id);
+            }
+          } else {
+            setSessions([]);
           }
         } catch (err) {
           console.error("Failed to load past sessions", err);
+          setSessions([]);
         }
       }
     }
