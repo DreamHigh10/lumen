@@ -1,0 +1,17 @@
+{
+  "short_name": "LUMEN",
+  "name": "LUMEN - Personal Wisdom & Mentorship",
+  "description": "An interactive classroom companion and personal AI clone named LUMEN.",
+  "icons": [
+    {
+      "src": "/lumen_logo.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0c0a09",
+  "theme_color": "#0c0a09",
+  "display": "standalone",
+  "orientation": "portrait"
+}

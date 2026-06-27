@@ -1,0 +1,9 @@
+{
+  "name": "LUMEN",
+  "description": "An interactive classroom companion and personal wisdom clone that answers questions based on class transcriptions, provides life and clarity advice, and drafts custom business strategies.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
