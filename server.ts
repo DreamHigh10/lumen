@@ -213,6 +213,7 @@ async function generateContentWithRetry(ai: any, params: { model: string; conten
   const uniqueModels = Array.from(new Set(modelsToTry.filter(Boolean)));
   
   let lastError: any = null;
+  let forceFallbackToGroq = false;
 
   // Promise timeout helper
   const withTimeout = async (promise: Promise<any>, ms: number) => {
@@ -230,6 +231,7 @@ async function generateContentWithRetry(ai: any, params: { model: string; conten
   };
   
   for (const model of uniqueModels) {
+    if (forceFallbackToGroq) break;
     let attempts = 3;
     let delay = 1000; // start with 1s delay
     
@@ -249,6 +251,19 @@ async function generateContentWithRetry(ai: any, params: { model: string; conten
         const errStr = String(err.message || err);
         console.error(`[LUMEN API] Error with model ${model} (attempt ${attempt}/${attempts}):`, errStr);
         
+        // If it's a quota/rate-limit error that cannot be resolved immediately and Groq is available, trigger immediate fallback
+        const hasGroq = !!process.env.GROQ_API_KEY;
+        const isQuotaExceeded = errStr.includes("Quota exceeded") || 
+                                errStr.includes("RESOURCE_EXHAUSTED") || 
+                                errStr.includes("exceeded your current quota") ||
+                                errStr.includes("quota");
+        
+        if (isQuotaExceeded && hasGroq) {
+          console.log("[LUMEN API] Quota exceeded on Gemini. Fast-failing to Groq fallback...");
+          forceFallbackToGroq = true;
+          break;
+        }
+        
         // Determine if error status or message suggests a transient issue (503, 429, high demand, or timeout)
         const status = err.status || (err.error && err.error.code);
         const isTimeout = errStr.includes("timed out");
@@ -261,6 +276,13 @@ async function generateContentWithRetry(ai: any, params: { model: string; conten
         if (!isTransient) {
           // If it's a structural or validation error (e.g., bad parameter / prompt), don't waste time retrying;
           // directly proceed to fallback model or bubble up the error.
+          break;
+        }
+        
+        // If we have Groq, we don't want to wait too long. Skip further retries on Gemini if we have a fallback option.
+        if (hasGroq && attempt >= 2) {
+          console.log("[LUMEN API] Gemini transient error/timeout. Groq fallback is available, skipping further retries...");
+          forceFallbackToGroq = true;
           break;
         }
         
@@ -282,9 +304,10 @@ async function generateContentWithRetry(ai: any, params: { model: string; conten
       console.error("[LUMEN API] Fallback to Groq also failed:", groqError);
       throw new Error(`Both Gemini and Groq fallback failed. Gemini Error: ${lastError?.message || lastError}. Groq Error: ${groqError.message}`);
     }
+  } else {
+    const originalErrorMessage = lastError?.message || lastError;
+    throw new Error(`${originalErrorMessage}\n\nTip: You can add a GROQ_API_KEY in the Secrets panel of your AI Studio Settings to enable an automatic high-performance fallback model when Gemini hits quota limits.`);
   }
-  
-  throw lastError || new Error("Failed to generate content after trying multiple models and retrying.");
 }
 
 async function startServer() {
