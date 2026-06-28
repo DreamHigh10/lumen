@@ -129,6 +129,83 @@ let transcripts = readJsonFile<Transcript[]>(TRANSCRIPTS_FILE, DEFAULT_TRANSCRIP
 let persona = readJsonFile<Persona>(PERSONA_FILE, DEFAULT_PERSONA);
 let allowedEmails = readJsonFile<string[]>(EMAILS_FILE, DEFAULT_EMAILS);
 
+// Helper to call Groq API (llama-3.3-70b-versatile) when Gemini fails
+async function generateContentWithGroq(params: { contents: any; config?: any }) {
+  const groqApiKey = process.env.GROQ_API_KEY;
+  if (!groqApiKey) {
+    throw new Error("GROQ_API_KEY environment variable is not set. Cannot perform Groq fallback.");
+  }
+
+  console.log("[LUMEN API] Fallback: Initiating request to Groq (llama-3.3-70b-versatile)...");
+
+  // Map contents and configuration to OpenAI-compatible messages for Groq
+  const groqMessages: any[] = [];
+  
+  if (params.config?.systemInstruction) {
+    groqMessages.push({
+      role: "system",
+      content: params.config.systemInstruction
+    });
+  }
+
+  if (typeof params.contents === "string") {
+    groqMessages.push({
+      role: "user",
+      content: params.contents
+    });
+  } else if (Array.isArray(params.contents)) {
+    for (const item of params.contents) {
+      const role = item.role === "model" ? "assistant" : "user";
+      let textContent = "";
+      if (Array.isArray(item.parts)) {
+        for (const part of item.parts) {
+          if (part.text) {
+            textContent += part.text;
+          } else if (part.inlineData) {
+            textContent += "\n[An image was attached in the user's message, but the fallback model cannot view images. Please address the user text and let them know you cannot see the image.]\n";
+          }
+        }
+      } else if (typeof item.parts === "string") {
+        textContent = item.parts;
+      } else if (item.parts && typeof item.parts === "object" && (item.parts as any).text) {
+        textContent = (item.parts as any).text;
+      }
+      groqMessages.push({ role, content: textContent });
+    }
+  }
+
+  const isJson = params.config?.responseMimeType === "application/json";
+  const temperature = params.config?.temperature ?? 0.8;
+
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${groqApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile",
+      messages: groqMessages,
+      temperature: temperature,
+      ...(isJson ? { response_format: { type: "json_object" } } : {}),
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Groq API returned status ${response.status}: ${errorText}`);
+  }
+
+  const data: any = await response.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error("Empty response received from Groq API.");
+  }
+
+  console.log("[LUMEN API] Fallback: Groq request succeeded!");
+  return { text: content };
+}
+
 // Robust Gemini content generation helper with transient-error retry and model fallback
 async function generateContentWithRetry(ai: any, params: { model: string; contents: any; config?: any }) {
   const modelsToTry = [params.model, "gemini-flash-latest", "gemini-3.5-flash"];
@@ -136,6 +213,21 @@ async function generateContentWithRetry(ai: any, params: { model: string; conten
   const uniqueModels = Array.from(new Set(modelsToTry.filter(Boolean)));
   
   let lastError: any = null;
+
+  // Promise timeout helper
+  const withTimeout = async (promise: Promise<any>, ms: number) => {
+    let timeoutId: any;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error("Gemini API call timed out after 15 seconds"));
+      }, ms);
+    });
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
   
   for (const model of uniqueModels) {
     let attempts = 3;
@@ -144,19 +236,23 @@ async function generateContentWithRetry(ai: any, params: { model: string; conten
     for (let attempt = 1; attempt <= attempts; attempt++) {
       try {
         console.log(`[LUMEN API] Attempting generateContent using model: ${model} (attempt ${attempt}/${attempts})`);
-        const response = await ai.models.generateContent({
-          ...params,
-          model: model,
-        });
+        const response = await withTimeout(
+          ai.models.generateContent({
+            ...params,
+            model: model,
+          }),
+          15000
+        );
         return response;
       } catch (err: any) {
         lastError = err;
         const errStr = String(err.message || err);
         console.error(`[LUMEN API] Error with model ${model} (attempt ${attempt}/${attempts}):`, errStr);
         
-        // Determine if error status or message suggests a transient issue (503, 429, high demand)
+        // Determine if error status or message suggests a transient issue (503, 429, high demand, or timeout)
         const status = err.status || (err.error && err.error.code);
-        const isTransient = status === 503 || status === 429 || !status || 
+        const isTimeout = errStr.includes("timed out");
+        const isTransient = isTimeout || status === 503 || status === 429 || !status || 
                             errStr.includes("UNAVAILABLE") || 
                             errStr.includes("demand") || 
                             errStr.includes("limit") ||
@@ -169,11 +265,22 @@ async function generateContentWithRetry(ai: any, params: { model: string; conten
         }
         
         if (attempt < attempts) {
-          console.log(`[LUMEN API] Transient error. Retrying in ${delay}ms...`);
+          console.log(`[LUMEN API] Transient error or timeout. Retrying in ${delay}ms...`);
           await new Promise((resolve) => setTimeout(resolve, delay));
           delay *= 2; // exponential backoff
         }
       }
+    }
+  }
+
+  // Fallback to Groq if GEMINI failed/timed out and GROQ_API_KEY is defined
+  if (process.env.GROQ_API_KEY) {
+    try {
+      const groqResponse = await generateContentWithGroq(params);
+      return groqResponse;
+    } catch (groqError: any) {
+      console.error("[LUMEN API] Fallback to Groq also failed:", groqError);
+      throw new Error(`Both Gemini and Groq fallback failed. Gemini Error: ${lastError?.message || lastError}. Groq Error: ${groqError.message}`);
     }
   }
   
