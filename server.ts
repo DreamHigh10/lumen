@@ -129,14 +129,14 @@ let transcripts = readJsonFile<Transcript[]>(TRANSCRIPTS_FILE, DEFAULT_TRANSCRIP
 let persona = readJsonFile<Persona>(PERSONA_FILE, DEFAULT_PERSONA);
 let allowedEmails = readJsonFile<string[]>(EMAILS_FILE, DEFAULT_EMAILS);
 
-// Helper to call Groq API (llama-3.3-70b-versatile) when Gemini fails
+// Helper to call Groq API (openai/gpt-oss-120b) when Gemini fails
 async function generateContentWithGroq(params: { contents: any; config?: any }) {
   const groqApiKey = process.env.GROQ_API_KEY;
   if (!groqApiKey) {
     throw new Error("GROQ_API_KEY environment variable is not set. Cannot perform Groq fallback.");
   }
 
-  console.log("[LUMEN API] Fallback: Initiating request to Groq (llama-3.3-70b-versatile)...");
+  console.log("[LUMEN API] Fallback: Initiating request to Groq (openai/gpt-oss-120b)...");
 
   // Map contents and configuration to OpenAI-compatible messages for Groq
   const groqMessages: any[] = [];
@@ -184,7 +184,7 @@ async function generateContentWithGroq(params: { contents: any; config?: any }) 
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
+      model: "openai/gpt-oss-120b",
       messages: groqMessages,
       temperature: temperature,
       ...(isJson ? { response_format: { type: "json_object" } } : {}),
