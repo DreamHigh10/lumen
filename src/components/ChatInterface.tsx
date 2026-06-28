@@ -5,7 +5,7 @@ import {
   Compass, Shield, RefreshCw, Mic, MicOff, Volume2, VolumeX, 
   Monitor, Image, Trash2, Paperclip, Check, FileText, Download, 
   Plus, Calendar, ExternalLink, Play, Lightbulb, CheckSquare, Sliders, ArrowUp,
-  BookOpen, User
+  BookOpen, User, X, ChevronDown, Headphones
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import ScreenMonitor from "./ScreenMonitor";
@@ -43,6 +43,17 @@ export default function ChatInterface({
   const [attachedImage, setAttachedImage] = useState<{ base64: string; mimeType: string } | null>(null);
   const [showEye, setShowEye] = useState(false);
   
+  // Dedicated Speech-to-Speech Voice Mode states & refs
+  const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [voiceState, setVoiceState] = useState<"idle" | "listening" | "thinking" | "speaking">("idle");
+  const [isMuted, setIsMuted] = useState(false);
+  const [lastSpokenText, setLastSpokenText] = useState("");
+  const [lastUserSpokenText, setLastUserSpokenText] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
+  
+  const voiceRecognitionRef = useRef<any>(null);
+  const voiceUtteranceRef = useRef<any>(null);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -64,20 +75,24 @@ export default function ChatInterface({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId]);
 
-  // Sync current active messages back to local storage whenever they change
+  // Sync current active messages back to sessions whenever they change and we are NOT streaming
   useEffect(() => {
-    if (!activeSessionId) return;
+    if (!activeSessionId || isStreaming) return;
     setSessions((prevSessions) => {
-      const updated = prevSessions.map((s) => {
+      const currentSession = prevSessions.find(s => s.id === activeSessionId);
+      if (currentSession && 
+          JSON.stringify(currentSession.messages) === JSON.stringify(messages) && 
+          currentSession.category === category) {
+        return prevSessions;
+      }
+      return prevSessions.map((s) => {
         if (s.id === activeSessionId) {
           return { ...s, messages, category };
         }
         return s;
       });
-      localStorage.setItem("luma_chat_sessions", JSON.stringify(updated));
-      return updated;
     });
-  }, [messages, category]);
+  }, [messages, category, activeSessionId, isStreaming, setSessions]);
 
   useEffect(() => {
     scrollToBottom();
@@ -138,7 +153,7 @@ export default function ChatInterface({
       alert("There are no messages in the current session to download.");
       return;
     }
-    let md = `# LUMEN AI Consultation Session Transcript\n`;
+    let md = `# LUMEN AI Lounge Session Transcript\n`;
     md += `*Generated on: ${new Date().toLocaleString()}*\n`;
     md += `*Category: ${category.toUpperCase()}*\n\n`;
     md += `==================================================\n\n`;
@@ -149,7 +164,7 @@ export default function ChatInterface({
       md += `--------------------------------------------------\n\n`;
     });
 
-    downloadFile(`Lumen_Consultation_${category}_${Date.now()}.md`, md, "text/markdown");
+    downloadFile(`Lumen_Lounge_${category}_${Date.now()}.md`, md, "text/markdown");
   };
 
   // Speech-to-Text handler
@@ -251,6 +266,268 @@ export default function ChatInterface({
     window.speechSynthesis.speak(utterance);
   };
 
+  // --- SPEECH-TO-SPEECH VOICE MODE CORE ENGINE ---
+  const startVoiceListening = () => {
+    if (isMuted) return;
+    
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Speech recognition is not supported in this browser. Please use Chrome or Safari.");
+      setVoiceState("idle");
+      return;
+    }
+
+    if (voiceRecognitionRef.current) {
+      try {
+        voiceRecognitionRef.current.abort();
+      } catch (e) {}
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+
+    recognition.onstart = () => {
+      setVoiceState("listening");
+    };
+
+    recognition.onend = () => {
+      setVoiceState((prev) => {
+        if (prev === "listening") return "idle";
+        return prev;
+      });
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Voice Mode recognition error:", event.error);
+      if (event.error === "not-allowed") {
+        alert("Microphone access is denied. Please allow microphone access in your browser settings.");
+        setIsVoiceMode(false);
+      } else {
+        setVoiceState("idle");
+      }
+    };
+
+    recognition.onresult = async (event: any) => {
+      const resultText = event.results[0][0].transcript;
+      if (resultText && resultText.trim()) {
+        setLastUserSpokenText(resultText);
+        setVoiceState("thinking");
+        await sendVoiceMessage(resultText);
+      }
+    };
+
+    voiceRecognitionRef.current = recognition;
+    recognition.start();
+  };
+
+  const sendVoiceMessage = async (text: string) => {
+    const userMessage: Message = {
+      role: "user",
+      text: text,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      category: category
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+
+    let currentSessionId = activeSessionId;
+    let currentSessions = [...sessions];
+
+    if (!currentSessionId) {
+      currentSessionId = `session_${Date.now()}`;
+      const slicedText = text.trim().split(" ").slice(0, 4).join(" ");
+      const threadTitle = slicedText ? `${slicedText}...` : `Lounge Session`;
+      
+      const newSession: ChatSession = {
+        id: currentSessionId,
+        title: threadTitle,
+        messages: [userMessage],
+        category: category,
+        timestamp: new Date().toLocaleDateString([], { month: "short", day: "numeric" })
+      };
+      currentSessions = [newSession, ...currentSessions];
+      setSessions(currentSessions);
+      setActiveSessionId(currentSessionId);
+    } else {
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (s.id === currentSessionId) {
+            return { ...s, messages: [...s.messages, userMessage] };
+          }
+          return s;
+        })
+      );
+    }
+
+    try {
+      const sequence = !activeSessionId 
+        ? [userMessage] 
+        : [...messages, userMessage];
+
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: sequence.map((m) => ({
+            role: m.role,
+            text: m.text,
+            image: m.image
+          })),
+          category: category
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to communicate with LUMEN.");
+      }
+
+      const responseData = await res.json();
+      const fullText = responseData.text;
+
+      const modelMessage: Message = {
+        role: "model",
+        text: fullText,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        category: category
+      };
+
+      setMessages((prev) => [...prev, modelMessage]);
+
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (s.id === currentSessionId) {
+            return { ...s, messages: [...s.messages, modelMessage] };
+          }
+          return s;
+        })
+      );
+
+      setLastSpokenText(fullText);
+      setVoiceState("speaking");
+      speakVoiceResponse(fullText);
+    } catch (err: any) {
+      console.error(err);
+      setVoiceState("idle");
+      const errMsg = "I'm sorry, I'm having trouble connecting to my strategic models right now. Please try again.";
+      setLastSpokenText(errMsg);
+      speakVoiceResponse(errMsg);
+    }
+  };
+
+  const speakVoiceResponse = (text: string) => {
+    if (!window.speechSynthesis) {
+      setVoiceState("idle");
+      return;
+    }
+
+    if (window.speechSynthesis.speaking) {
+      window.speechSynthesis.cancel();
+    }
+
+    const cleanText = text
+      .replace(/[*#`_\-]/g, "")
+      .replace(/>\s/g, "")
+      .replace(/\[DH\d+\]/g, "")
+      .trim();
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+
+    if (persona) {
+      utterance.pitch = persona.voicePitch ?? 1.0;
+      utterance.rate = persona.voiceRate ?? 1.0;
+
+      const voices = window.speechSynthesis.getVoices();
+      const preferredGender = persona.voiceGender || "male";
+      const voice = voices.find(v => {
+        const name = v.name.toLowerCase();
+        const lang = v.lang.toLowerCase();
+        if (!lang.startsWith("en")) return false;
+        if (preferredGender === "male") {
+          return name.includes("male") || name.includes("david") || name.includes("natural") || name.includes("google us english");
+        } else {
+          return name.includes("female") || name.includes("zira") || name.includes("google uk english female");
+        }
+      });
+      if (voice) {
+        utterance.voice = voice;
+      }
+    }
+
+    utterance.onend = () => {
+      setVoiceState("idle");
+      setTimeout(() => {
+        if (isVoiceMode && !isMuted) {
+          startVoiceListening();
+        }
+      }, 500);
+    };
+
+    utterance.onerror = () => {
+      setVoiceState("idle");
+    };
+
+    voiceUtteranceRef.current = utterance;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handleToggleMute = () => {
+    if (isMuted) {
+      setIsMuted(false);
+      setVoiceState("idle");
+      setTimeout(() => {
+        startVoiceListening();
+      }, 200);
+    } else {
+      setIsMuted(true);
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      if (voiceRecognitionRef.current) {
+        try {
+          voiceRecognitionRef.current.abort();
+        } catch (e) {}
+      }
+      setVoiceState("idle");
+    }
+  };
+
+  useEffect(() => {
+    if (isVoiceMode) {
+      setVoiceState("idle");
+      const timer = setTimeout(() => {
+        startVoiceListening();
+      }, 500);
+      return () => clearTimeout(timer);
+    } else {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      if (voiceRecognitionRef.current) {
+        try {
+          voiceRecognitionRef.current.abort();
+        } catch (e) {}
+      }
+      setVoiceState("idle");
+    }
+  }, [isVoiceMode]);
+
+  useEffect(() => {
+    return () => {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      if (voiceRecognitionRef.current) {
+        try {
+          voiceRecognitionRef.current.abort();
+        } catch (e) {}
+      }
+    };
+  }, []);
+
+  // --- END OF VOICE MODE CORE ENGINE ---
+
   // Direct image uploading
   const triggerImageSelect = () => {
     fileInputRef.current?.click();
@@ -293,7 +570,7 @@ export default function ChatInterface({
       currentSessionId = `session_${Date.now()}`;
       // Generate a nice human readable title from the message text
       const slicedText = textToSend.trim().split(" ").slice(0, 4).join(" ");
-      const threadTitle = slicedText ? `${slicedText}...` : `Consultation thread`;
+      const threadTitle = slicedText ? `${slicedText}...` : `Lounge Session`;
       
       const newSession: ChatSession = {
         id: currentSessionId,
@@ -343,16 +620,47 @@ export default function ChatInterface({
       }
 
       const responseData = await res.json();
+      const fullText = responseData.text;
       
       const cloneResponse: Message = {
         role: "model",
-        text: responseData.text,
+        text: "",
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         category: category
       };
 
       setMessages((prev) => [...prev, cloneResponse]);
+      setIsStreaming(true);
+
+      // Stream words in adaptive chunks to make response rates super fast yet organic
+      const words = fullText.split(" ");
+      let currentText = "";
+      let wordIdx = 0;
+      // Guarantee completion within ~30 ticks (less than 450ms) for high snappiness
+      const wordsPerTick = Math.max(2, Math.ceil(words.length / 30));
+
+      const interval = setInterval(() => {
+        if (wordIdx < words.length) {
+          const chunk = words.slice(wordIdx, wordIdx + wordsPerTick).join(" ");
+          currentText += (wordIdx === 0 ? "" : " ") + chunk;
+          setMessages((prev) => {
+            const updated = [...prev];
+            if (updated.length > 0) {
+              updated[updated.length - 1] = {
+                ...updated[updated.length - 1],
+                text: currentText
+              };
+            }
+            return updated;
+          });
+          wordIdx += wordsPerTick;
+        } else {
+          clearInterval(interval);
+          setIsStreaming(false);
+        }
+      }, 15);
     } catch (err: any) {
+      setIsStreaming(false);
       setError(err.message || "An unexpected error occurred. Please verify your GEMINI_API_KEY configuration.");
     } finally {
       setLoading(false);
@@ -404,9 +712,30 @@ export default function ChatInterface({
 
   const parseBoldText = (text: string) => {
     const parts = text.split(/(\*\*.*?\*\*)/);
-    return parts.map((part, idx) => {
+    return parts.flatMap((part, idx) => {
       if (part.startsWith("**") && part.endsWith("**")) {
-        return <strong key={idx} className="font-bold text-stone-100">{part.slice(2, -2)}</strong>;
+        return [<strong key={`bold-${idx}`} className="font-bold text-stone-100">{parseCitations(part.slice(2, -2))}</strong>];
+      }
+      return parseCitations(part);
+    });
+  };
+
+  const parseCitations = (text: string) => {
+    const regex = /(DH\d+)/gi;
+    const parts = text.split(regex);
+    if (parts.length === 1) return [text];
+    
+    return parts.map((part, idx) => {
+      if (part.match(/^DH\d+$/i)) {
+        return (
+          <span 
+            key={`cite-${idx}`} 
+            className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-950/80 text-blue-400 border border-blue-800/40 mx-0.5 select-none align-middle font-mono uppercase cursor-help transition-all hover:bg-blue-900"
+            title={`Class code citation: ${part.toUpperCase()}`}
+          >
+            {part.toUpperCase()}
+          </span>
+        );
       }
       return part;
     });
@@ -470,18 +799,29 @@ export default function ChatInterface({
                 className="hidden"
               />
 
-              {/* Sliders settings / voice trigger */}
+              {/* Speech-to-Text (STT) Dictation Mode */}
               <button
                 type="button"
                 onClick={toggleListening}
-                className={`p-2 rounded-lg transition cursor-pointer ${
+                className={`p-2 rounded-lg transition cursor-pointer flex items-center justify-center ${
                   isListening 
-                    ? "bg-rose-950/40 text-rose-400 animate-pulse" 
+                    ? "bg-rose-950/40 text-rose-400 border border-rose-900/40 animate-pulse scale-105" 
                     : "text-stone-500 hover:text-stone-300 hover:bg-stone-900"
                 }`}
-                title={isListening ? "Listening... click to pause" : "Consult with your voice recording"}
+                title={isListening ? "Stop listening" : "Speech-to-Text: Dictate into prompt"}
               >
-                <Mic size={15} />
+                {isListening ? <MicOff size={15} className="text-rose-400 animate-pulse" /> : <Mic size={15} />}
+              </button>
+
+              {/* Speech-to-Speech (STS) Voice Lounge Mode */}
+              <button
+                type="button"
+                onClick={() => setIsVoiceMode(true)}
+                className="p-1.5 px-2.5 rounded-lg border border-blue-900/30 bg-blue-950/10 hover:bg-blue-950/30 text-blue-400 hover:text-blue-300 transition cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
+                title="Speech-to-Speech: Enter Immersive Voice Lounge"
+              >
+                <Headphones size={13} className="text-blue-400 animate-pulse" />
+                <span>Voice Lounge (STS)</span>
               </button>
             </div>
 
@@ -607,14 +947,13 @@ export default function ChatInterface({
                   <User size={13} className="text-purple-400" />
                   Tweak Persona Studio
                 </button>
-
-                {onStartNewSession && (
+                 {onStartNewSession && (
                   <button
                     onClick={onStartNewSession}
                     className="bg-[#09090b] hover:bg-stone-900 border border-stone-850 hover:border-stone-700 px-3.5 py-2 rounded-xl text-xs font-semibold text-stone-400 hover:text-stone-200 transition duration-250 cursor-pointer flex items-center gap-2"
                   >
                     <Plus size={13} className="text-emerald-500" />
-                    Start New Consultation
+                    New Lounge Session
                   </button>
                 )}
               </div>
@@ -631,13 +970,13 @@ export default function ChatInterface({
               <div className="flex items-center justify-between pb-3 border-b border-stone-900 mb-2 select-none">
                 <div className="flex items-center gap-2">
                   <MessageSquare size={14} className="text-stone-500" />
-                  <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Active Strategic Consultation</span>
+                  <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Active Lounge Session</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleDownloadTranscript}
                     className="p-1.5 rounded-lg text-stone-500 hover:text-stone-300 hover:bg-stone-900/50 transition cursor-pointer text-xs flex items-center gap-1 font-semibold"
-                    title="Export current consultation thread"
+                    title="Export current lounge session"
                   >
                     <Download size={13} />
                     <span>Export Logs</span>
@@ -775,6 +1114,166 @@ export default function ChatInterface({
           {renderInputCard()}
         </div>
       )}
+
+      {/* Immersive Speech-to-Speech Voice Mode Overlay */}
+      <AnimatePresence>
+        {isVoiceMode && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-stone-950/98 backdrop-blur-2xl flex flex-col items-center justify-between py-12 px-6 z-[100] overflow-hidden select-none"
+          >
+            {/* Tech starry grid style background */}
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.07)_0%,transparent_70%)] pointer-events-none z-0" />
+            
+            {/* Top Bar info */}
+            <div className="w-full max-w-xl flex items-center justify-between z-10">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
+                <span className="text-xs font-black tracking-widest text-stone-400 font-mono uppercase">LUMEN VOICE SEED ACTIVE</span>
+              </div>
+              <div className="bg-stone-900/60 border border-stone-850 px-3 py-1.5 rounded-full text-[10px] font-mono font-bold text-blue-400">
+                MASTER'S EXTENSION
+              </div>
+            </div>
+
+            {/* Glowing Breathing Orb Container */}
+            <div className="relative flex flex-col items-center justify-center flex-1 z-10 w-full max-w-lg">
+              {/* Outer Ripple Layers */}
+              {voiceState === "speaking" && (
+                <>
+                  <motion.div
+                    animate={{ scale: [1, 2], opacity: [0.6, 0] }}
+                    transition={{ repeat: Infinity, duration: 2, ease: "easeOut" }}
+                    className="absolute w-44 h-44 rounded-full bg-blue-500/10 border border-blue-500/30 filter blur-sm"
+                  />
+                  <motion.div
+                    animate={{ scale: [1, 2.5], opacity: [0.4, 0] }}
+                    transition={{ repeat: Infinity, duration: 2.5, ease: "easeOut", delay: 0.5 }}
+                    className="absolute w-44 h-44 rounded-full bg-blue-500/5 border border-blue-500/20 filter blur-md"
+                  />
+                </>
+              )}
+              
+              {voiceState === "listening" && (
+                <motion.div
+                  animate={{ scale: [1, 1.3, 1], opacity: [0.2, 0.4, 0.2] }}
+                  transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
+                  className="absolute w-48 h-48 rounded-full bg-cyan-500/10 border-2 border-cyan-500/20 filter blur-xs"
+                />
+              )}
+
+              {/* Glowing Ambient Background Glow for the main circle */}
+              <div 
+                className={`absolute w-48 h-48 rounded-full transition-all duration-700 filter blur-xl opacity-75 ${
+                  voiceState === "listening" ? "bg-cyan-500/20 shadow-[0_0_50px_rgba(6,182,212,0.4)]" :
+                  voiceState === "thinking" ? "bg-purple-500/20 shadow-[0_0_50px_rgba(168,85,247,0.4)] animate-pulse" :
+                  voiceState === "speaking" ? "bg-blue-500/25 shadow-[0_0_60px_rgba(59,130,246,0.5)]" :
+                  "bg-blue-900/15 shadow-[0_0_30px_rgba(59,130,246,0.15)]"
+                }`}
+              />
+
+              {/* Main Visual Sphere with John's image inside */}
+              <motion.div
+                animate={
+                  voiceState === "listening" ? { scale: [1, 1.05, 1] } :
+                  voiceState === "thinking" ? { rotate: 360 } :
+                  voiceState === "speaking" ? { scale: [1, 1.03, 0.98, 1.02, 1] } :
+                  {}
+                }
+                transition={
+                  voiceState === "thinking" ? { repeat: Infinity, duration: 3, ease: "linear" } :
+                  voiceState === "listening" ? { repeat: Infinity, duration: 1.2, ease: "easeInOut" } :
+                  voiceState === "speaking" ? { repeat: Infinity, duration: 2, ease: "easeInOut" } :
+                  {}
+                }
+                onClick={voiceState === "idle" ? startVoiceListening : undefined}
+                className={`relative w-36 h-36 rounded-full flex items-center justify-center border-3 transition-all duration-500 overflow-hidden shadow-2xl z-20 cursor-pointer ${
+                  voiceState === "listening" ? "border-cyan-400 bg-stone-900" :
+                  voiceState === "thinking" ? "border-purple-500 bg-stone-900" :
+                  voiceState === "speaking" ? "border-blue-400 bg-stone-950" :
+                  "border-stone-800 bg-stone-950"
+                }`}
+              >
+                <img 
+                  src="/John%20immage.jpg" 
+                  alt="Lumen Master John" 
+                  className="absolute inset-0 w-full h-full object-cover z-20 opacity-90 transition-all duration-300"
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.opacity = '0';
+                  }}
+                />
+                
+                {/* Fallback & Layer Overlays */}
+                <span className="text-4xl font-bold text-white relative z-10 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] font-sans">Ω</span>
+                
+                {/* Thinking shimmering border ring */}
+                {voiceState === "thinking" && (
+                  <div className="absolute inset-0 bg-gradient-to-tr from-purple-500/20 via-pink-500/20 to-blue-500/20 animate-spin z-30 pointer-events-none" />
+                )}
+              </motion.div>
+
+              {/* Dynamic State Text */}
+              <div className="mt-8 text-center space-y-1.5 min-h-[50px] px-6">
+                <p className="text-stone-400 text-xs font-bold tracking-widest font-mono uppercase">
+                  {isMuted ? "MUTED / PAUSED" : 
+                   voiceState === "listening" ? "Lumen is listening..." :
+                   voiceState === "thinking" ? "Mastering thoughts..." :
+                   voiceState === "speaking" ? "Lumen is responding..." :
+                   "Tap to start talking"}
+                </p>
+                
+                {/* Transcripts visual helper bubble */}
+                <div className="max-w-md mx-auto">
+                  {voiceState === "speaking" && lastSpokenText && (
+                    <p className="text-stone-200 text-sm font-sans font-medium italic transition duration-300 line-clamp-2 leading-relaxed">
+                      "{lastSpokenText}"
+                    </p>
+                  )}
+                  {voiceState === "listening" && lastUserSpokenText && (
+                    <p className="text-stone-400 text-xs font-sans italic line-clamp-1">
+                      You: "{lastUserSpokenText}"
+                    </p>
+                  )}
+                  {voiceState === "idle" && (
+                    <p className="text-stone-500 text-xs font-sans">
+                      Start speaking or ask Kehinde's wisdom.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Actions Bar */}
+            <div className="w-full max-w-md flex items-center justify-center gap-8 z-10">
+              {/* Mute toggle button */}
+              <button
+                onClick={handleToggleMute}
+                className={`p-4 rounded-full transition cursor-pointer flex items-center justify-center border ${
+                  isMuted 
+                    ? "bg-rose-950/50 border-rose-900 text-rose-400 hover:bg-rose-900/50" 
+                    : "bg-stone-900/80 border-stone-800 text-stone-400 hover:text-stone-100 hover:bg-stone-800"
+                }`}
+                title={isMuted ? "Unmute Voice" : "Mute/Pause Voice"}
+              >
+                {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
+              </button>
+
+              {/* End session control */}
+              <button
+                onClick={() => setIsVoiceMode(false)}
+                className="bg-stone-100 hover:bg-white text-stone-950 font-sans font-bold text-xs uppercase tracking-wider px-6 py-3.5 rounded-full shadow-lg transition duration-200 flex items-center gap-2 cursor-pointer"
+                title="Exit Voice Mode and return to text chat"
+              >
+                <X size={14} strokeWidth={2.5} />
+                <span>Exit Session</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

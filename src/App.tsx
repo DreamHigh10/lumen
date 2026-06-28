@@ -8,7 +8,7 @@ import {
   Sparkles, BookOpen, User, MessageSquare, Key, Shield, 
   Lock, ArrowRight, LogOut, CheckCircle, AlertCircle, Eye, Users,
   PanelLeft, Plus, Trash2, HelpCircle, X, ChevronDown, ChevronUp, UserCheck,
-  Globe
+  Globe, Sun, Moon
 } from "lucide-react";
 import { Persona, ChatSession } from "./types";
 
@@ -33,6 +33,61 @@ export default function App() {
   // Lifted Chat Sessions State
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+
+  // Theme state: light or dark
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    try {
+      const saved = localStorage.getItem("luma_theme");
+      return (saved === "light" || saved === "dark") ? saved : "dark";
+    } catch (e) {
+      return "dark";
+    }
+  });
+
+  const safeSaveSessions = (sessionsList: ChatSession[]) => {
+    try {
+      localStorage.setItem("luma_chat_sessions", JSON.stringify(sessionsList));
+    } catch (err) {
+      console.warn("Storage quota exceeded or error saving sessions. Cleaning image data...", err);
+      try {
+        const cleaned = sessionsList.map((s) => ({
+          ...s,
+          messages: s.messages.map((m) => {
+            if (m.image) {
+              const { image, ...rest } = m;
+              return rest;
+            }
+            return m;
+          })
+        }));
+        localStorage.setItem("luma_chat_sessions", JSON.stringify(cleaned));
+      } catch (innerErr) {
+        console.error("Failed to save even cleaned sessions:", innerErr);
+      }
+    }
+  };
+
+  useEffect(() => {
+    try {
+      if (theme === "light") {
+        document.documentElement.classList.add("theme-light");
+        document.documentElement.classList.remove("theme-dark");
+      } else {
+        document.documentElement.classList.remove("theme-light");
+        document.documentElement.classList.add("theme-dark");
+      }
+      localStorage.setItem("luma_theme", theme);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [theme]);
+
+  // Unified sessions persistence whenever sessions change
+  useEffect(() => {
+    if (isAuthenticated) {
+      safeSaveSessions(sessions);
+    }
+  }, [sessions, isAuthenticated]);
 
   useEffect(() => {
     // Check local storage for persistent whitelisted session
@@ -201,7 +256,7 @@ export default function App() {
     const newSessionId = `session_${Date.now()}`;
     const newSession: ChatSession = {
       id: newSessionId,
-      title: `Consultation Thread #${sessions.length + 1}`,
+      title: `Lounge Session #${sessions.length + 1}`,
       messages: [],
       category: "general",
       timestamp: new Date().toLocaleDateString([], { month: "short", day: "numeric" })
@@ -210,7 +265,6 @@ export default function App() {
     const updated = [newSession, ...sessions];
     setSessions(updated);
     setActiveSessionId(newSessionId);
-    localStorage.setItem("luma_chat_sessions", JSON.stringify(updated));
     setActiveTab("chat");
   };
 
@@ -227,7 +281,6 @@ export default function App() {
     if (window.speechSynthesis) window.speechSynthesis.cancel();
     const filtered = sessions.filter((s) => s.id !== idToDelete);
     setSessions(filtered);
-    localStorage.setItem("luma_chat_sessions", JSON.stringify(filtered));
 
     if (activeSessionId === idToDelete) {
       if (filtered.length > 0) {
@@ -398,7 +451,7 @@ export default function App() {
                   }`}
                 >
                   <MessageSquare size={14} className="text-stone-400" />
-                  <span>Consultation Hub</span>
+                  <span>The Lounge</span>
                 </button>
 
                 <button
@@ -541,7 +594,7 @@ export default function App() {
               <span className="text-xs font-semibold text-stone-400">Workspace</span>
               <span className="text-xs text-stone-600">/</span>
               <span className="text-xs font-bold text-stone-100 uppercase tracking-wider">
-                {activeTab === "chat" && "Consultation Hub"}
+                {activeTab === "chat" && "THE LOUNGE"}
                 {activeTab === "transcripts" && "Class Materials"}
                 {activeTab === "optimization" && "SEO / GEO / AEO Suite"}
                 {activeTab === "persona" && "Identity Studio"}
@@ -552,6 +605,15 @@ export default function App() {
 
           {/* Right Header Utilities matching v0.dev */}
           <div className="flex items-center gap-2.5">
+            {/* Elegant Theme Toggle Button */}
+            <button
+              onClick={() => setTheme((prev) => (prev === "dark" ? "light" : "dark"))}
+              className="p-1.5 rounded-lg text-stone-400 hover:text-stone-200 hover:bg-stone-900 transition cursor-pointer flex items-center justify-center border border-transparent hover:border-stone-800"
+              title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            >
+              {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+            </button>
+
             {/* Profile circular avatar indicator */}
             <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-stone-800 to-stone-700 flex items-center justify-center font-bold text-[10px] text-stone-200 border border-stone-800 shadow-xs select-none">
               {userEmail ? userEmail.substring(0, 2).toUpperCase() : "LU"}

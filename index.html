@@ -11,10 +11,8 @@
     <script>
       // Clear any service workers and caches to prevent stale, broken preview caching
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function(registrations) {
-          for (let registration of registrations) {
-            registration.unregister();
-          }
+        navigator.serviceWorker.getRegistrations().then(rs => {
+          if (rs.length) Promise.all(rs.map(r => r.unregister())).then(() => location.reload());
         });
       }
       if ('caches' in window) {

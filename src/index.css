@@ -1,1 +1,90 @@
 @import "tailwindcss";
+
+/* Elegant Light Mode Color Re-mapping */
+.theme-light {
+  --color-stone-950: #fafaf9; /* warm off-white main canvas background */
+  --color-stone-900: #f5f5f4; /* light gray card and panel background */
+  --color-stone-850: #e7e5e4; /* light borders */
+  --color-stone-800: #d6d3d1; /* medium borders */
+  --color-stone-700: #a8a29e; /* dark gray accents */
+  --color-stone-600: #78716c; /* muted supporting text */
+  --color-stone-500: #57534e; /* regular supporting text */
+  --color-stone-400: #44403c; /* secondary body text */
+  --color-stone-300: #292524; /* primary headings */
+  --color-stone-200: #1c1917; /* deep bold headings */
+  --color-stone-100: #0c0a09; /* main text */
+  --color-stone-50: #09090b;
+
+  /* Global baseline overrides */
+  background-color: #fafaf9 !important;
+  color: #0c0a09 !important;
+}
+
+/* Redefine hardcoded dark-mode hex background colors inside Light Mode */
+.theme-light .bg-\[\#09090b\] {
+  background-color: #f5f5f4 !important;
+  border-color: #e7e5e4 !important;
+}
+.theme-light .bg-\[\#0d0d0d\] {
+  background-color: #fafaf9 !important;
+  border-color: #e7e5e4 !important;
+}
+.theme-light .bg-\[\#121214\] {
+  background-color: #f5f5f4 !important;
+}
+.theme-light .bg-\[\#0d0d0d\]\/40 {
+  background-color: rgba(245, 245, 244, 0.4) !important;
+}
+.theme-light .bg-\[\#09090b\]\/40 {
+  background-color: rgba(245, 245, 244, 0.4) !important;
+}
+.theme-light .bg-\[\#18181b\] {
+  background-color: #f5f5f4 !important;
+  border-color: #d6d3d1 !important;
+}
+.theme-light .hover\:bg-\[\#27272a\]:hover {
+  background-color: #e7e5e4 !important;
+}
+.theme-light .bg-stone-950 {
+  background-color: #fafaf9 !important;
+}
+.theme-light .bg-stone-900 {
+  background-color: #f5f5f4 !important;
+}
+.theme-light .border-stone-900 {
+  border-color: #e7e5e4 !important;
+}
+.theme-light .border-stone-850 {
+  border-color: #e7e5e4 !important;
+}
+.theme-light .border-stone-800 {
+  border-color: #d6d3d1 !important;
+}
+.theme-light .text-stone-100 {
+  color: #0c0a09 !important;
+}
+.theme-light .text-stone-200 {
+  color: #1c1917 !important;
+}
+.theme-light .text-stone-300 {
+  color: #292524 !important;
+}
+.theme-light .text-stone-400 {
+  color: #44403c !important;
+}
+.theme-light .text-stone-500 {
+  color: #57534e !important;
+}
+.theme-light .text-white {
+  color: #0c0a09 !important;
+}
+.theme-light .shadow-2xl {
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Soft transition effects when toggling modes */
+* {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 200ms;
+}
