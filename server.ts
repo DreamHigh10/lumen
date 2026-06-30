@@ -3,7 +3,9 @@ import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
-import { Transcript, Persona, Message } from "./src/types.js";
+import { Transcript, Persona, Message, ChatSession } from "./src/types.js";
+import { initializeApp } from "firebase/app";
+import { getFirestore, collection, doc, getDocs, getDoc, setDoc, deleteDoc, query, where } from "firebase/firestore";
 
 // Ensure data directory exists
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -124,10 +126,209 @@ function writeJsonFile<T>(filePath: string, data: T): void {
   }
 }
 
+// Initialize Firestore database reference
+let db: any = null;
+try {
+  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+  if (fs.existsSync(configPath)) {
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    const firebaseApp = initializeApp(config);
+    db = getFirestore(firebaseApp, config.firestoreDatabaseId || "(default)");
+    console.log("[LUMEN API] Firestore initialized successfully with database ID:", config.firestoreDatabaseId);
+  } else {
+    console.warn("[LUMEN API] firebase-applet-config.json not found. Using local JSON files only.");
+  }
+} catch (err) {
+  console.error("[LUMEN API] Failed to initialize Firestore:", err);
+}
+
+// Core async loaders for Firestore / Fallback
+async function loadTranscripts(): Promise<Transcript[]> {
+  if (db) {
+    try {
+      const colRef = collection(db, "transcripts");
+      const snapshot = await getDocs(colRef);
+      if (snapshot.empty) {
+        console.log("[LUMEN API] Firestore transcripts empty. Seeding defaults...");
+        for (const t of DEFAULT_TRANSCRIPTS) {
+          await setDoc(doc(db, "transcripts", t.id), t);
+        }
+        return DEFAULT_TRANSCRIPTS;
+      }
+      const list: Transcript[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push(docSnap.data() as Transcript);
+      });
+      list.sort((a, b) => b.id.localeCompare(a.id));
+      return list;
+    } catch (err) {
+      console.error("[LUMEN API] Error loading transcripts from Firestore, falling back to JSON:", err);
+    }
+  }
+  return readJsonFile<Transcript[]>(TRANSCRIPTS_FILE, DEFAULT_TRANSCRIPTS);
+}
+
+async function saveTranscriptToFirestore(t: Transcript): Promise<void> {
+  if (db) {
+    try {
+      await setDoc(doc(db, "transcripts", t.id), t);
+      console.log(`[LUMEN API] Transcript ${t.id} saved to Firestore.`);
+      return;
+    } catch (err) {
+      console.error("[LUMEN API] Failed to save transcript to Firestore:", err);
+    }
+  }
+  writeJsonFile(TRANSCRIPTS_FILE, transcripts);
+}
+
+async function deleteTranscriptFromFirestore(id: string): Promise<void> {
+  if (db) {
+    try {
+      await deleteDoc(doc(db, "transcripts", id));
+      console.log(`[LUMEN API] Transcript ${id} deleted from Firestore.`);
+      return;
+    } catch (err) {
+      console.error("[LUMEN API] Failed to delete transcript from Firestore:", err);
+    }
+  }
+  writeJsonFile(TRANSCRIPTS_FILE, transcripts);
+}
+
+async function loadPersona(): Promise<Persona> {
+  if (db) {
+    try {
+      const docRef = doc(db, "configs", "persona");
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return docSnap.data() as Persona;
+      } else {
+        console.log("[LUMEN API] Firestore persona config not found. Seeding default...");
+        await setDoc(docRef, DEFAULT_PERSONA);
+        return DEFAULT_PERSONA;
+      }
+    } catch (err) {
+      console.error("[LUMEN API] Error loading persona from Firestore, falling back to JSON:", err);
+    }
+  }
+  return readJsonFile<Persona>(PERSONA_FILE, DEFAULT_PERSONA);
+}
+
+async function savePersonaToFirestore(p: Persona): Promise<void> {
+  if (db) {
+    try {
+      await setDoc(doc(db, "configs", "persona"), p);
+      console.log("[LUMEN API] Persona configuration saved to Firestore.");
+      return;
+    } catch (err) {
+      console.error("[LUMEN API] Failed to save persona to Firestore:", err);
+    }
+  }
+  writeJsonFile(PERSONA_FILE, persona);
+}
+
+async function loadAllowedEmails(): Promise<string[]> {
+  if (db) {
+    try {
+      const docRef = doc(db, "configs", "emails");
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data && Array.isArray(data.list)) {
+          return data.list;
+        }
+      } else {
+        console.log("[LUMEN API] Firestore allowed emails config not found. Seeding defaults...");
+        await setDoc(docRef, { list: DEFAULT_EMAILS });
+        return DEFAULT_EMAILS;
+      }
+    } catch (err) {
+      console.error("[LUMEN API] Error loading allowed emails from Firestore, falling back to JSON:", err);
+    }
+  }
+  return readJsonFile<string[]>(EMAILS_FILE, DEFAULT_EMAILS);
+}
+
+async function saveAllowedEmailsToFirestore(list: string[]): Promise<void> {
+  if (db) {
+    try {
+      await setDoc(doc(db, "configs", "emails"), { list });
+      console.log("[LUMEN API] Whitelisted emails saved to Firestore.");
+      return;
+    } catch (err) {
+      console.error("[LUMEN API] Failed to save allowed emails to Firestore:", err);
+    }
+  }
+  writeJsonFile(EMAILS_FILE, allowedEmails);
+}
+
+async function loadUserChats(email: string): Promise<ChatSession[]> {
+  if (db) {
+    try {
+      const normalizedEmail = email.trim().toLowerCase();
+      const colRef = collection(db, "chats");
+      const q = query(colRef, where("email", "==", normalizedEmail));
+      const snapshot = await getDocs(q);
+      const list: ChatSession[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        list.push({
+          id: data.id,
+          title: data.title,
+          category: data.category,
+          timestamp: data.timestamp,
+          messages: data.messages || []
+        });
+      });
+      return list;
+    } catch (err) {
+      console.error("[LUMEN API] Error loading user chats from Firestore:", err);
+    }
+  }
+  return [];
+}
+
+async function saveUserChatSession(email: string, session: ChatSession): Promise<void> {
+  if (db) {
+    try {
+      const normalizedEmail = email.trim().toLowerCase();
+      const docId = `${normalizedEmail}_${session.id}`;
+      await setDoc(doc(db, "chats", docId), {
+        ...session,
+        email: normalizedEmail,
+        updatedAt: new Date().toISOString()
+      });
+      console.log(`[LUMEN API] Chat session ${session.id} for ${normalizedEmail} saved to Firestore.`);
+    } catch (err) {
+      console.error("[LUMEN API] Error saving chat session to Firestore:", err);
+    }
+  }
+}
+
+async function deleteUserChatSession(email: string, sessionId: string): Promise<void> {
+  if (db) {
+    try {
+      const normalizedEmail = email.trim().toLowerCase();
+      const docId = `${normalizedEmail}_${sessionId}`;
+      await deleteDoc(doc(db, "chats", docId));
+      console.log(`[LUMEN API] Chat session ${sessionId} for ${normalizedEmail} deleted from Firestore.`);
+    } catch (err) {
+      console.error("[LUMEN API] Error deleting chat session from Firestore:", err);
+    }
+  }
+}
+
 // Initialize server data
-let transcripts = readJsonFile<Transcript[]>(TRANSCRIPTS_FILE, DEFAULT_TRANSCRIPTS);
-let persona = readJsonFile<Persona>(PERSONA_FILE, DEFAULT_PERSONA);
-let allowedEmails = readJsonFile<string[]>(EMAILS_FILE, DEFAULT_EMAILS);
+let transcripts: Transcript[] = DEFAULT_TRANSCRIPTS;
+let persona: Persona = DEFAULT_PERSONA;
+let allowedEmails: string[] = DEFAULT_EMAILS;
+
+// Async loader on startup
+async function initializeData() {
+  transcripts = await loadTranscripts();
+  persona = await loadPersona();
+  allowedEmails = await loadAllowedEmails();
+  console.log(`[LUMEN API] Data initialized. Loaded ${transcripts.length} transcripts, persona for ${persona.name}, ${allowedEmails.length} allowed emails.`);
+}
 
 // Helper to call Groq API (openai/gpt-oss-120b) when Gemini fails
 async function generateContentWithGroq(params: { contents: any; config?: any }) {
@@ -187,6 +388,9 @@ async function generateContentWithGroq(params: { contents: any; config?: any }) 
       model: "openai/gpt-oss-120b",
       messages: groqMessages,
       temperature: temperature,
+      max_completion_tokens: 8192,
+      top_p: 1,
+      reasoning_effort: "medium",
       ...(isJson ? { response_format: { type: "json_object" } } : {}),
     }),
   });
@@ -317,6 +521,9 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
+  // Initialize server-side Firestore data and defaults
+  await initializeData();
+
   const verifyAdmin = (req: express.Request, res: express.Response): boolean => {
     const adminEmail = req.headers["x-admin-email"];
     if (adminEmail !== "ogungbadekehinde19@gmail.com") {
@@ -327,11 +534,12 @@ async function startServer() {
   };
 
   // API - Transcripts
-  app.get("/api/transcripts", (req, res) => {
+  app.get("/api/transcripts", async (req, res) => {
+    transcripts = await loadTranscripts();
     res.json(transcripts);
   });
 
-  app.post("/api/transcripts", (req, res) => {
+  app.post("/api/transcripts", async (req, res) => {
     if (!verifyAdmin(req, res)) return;
     const { title, content, tags, date } = req.body;
     if (!title || !content) {
@@ -347,24 +555,25 @@ async function startServer() {
       summary: content.substring(0, 150) + "..."
     };
     transcripts.push(newTranscript);
-    writeJsonFile(TRANSCRIPTS_FILE, transcripts);
+    await saveTranscriptToFirestore(newTranscript);
     res.status(201).json(newTranscript);
   });
 
-  app.delete("/api/transcripts/:id", (req, res) => {
+  app.delete("/api/transcripts/:id", async (req, res) => {
     if (!verifyAdmin(req, res)) return;
     const { id } = req.params;
     transcripts = transcripts.filter((t) => t.id !== id);
-    writeJsonFile(TRANSCRIPTS_FILE, transcripts);
+    await deleteTranscriptFromFirestore(id);
     res.json({ success: true, message: "Transcript deleted successfully." });
   });
 
   // API - Persona
-  app.get("/api/persona", (req, res) => {
+  app.get("/api/persona", async (req, res) => {
+    persona = await loadPersona();
     res.json(persona);
   });
 
-  app.post("/api/persona", (req, res) => {
+  app.post("/api/persona", async (req, res) => {
     if (!verifyAdmin(req, res)) return;
     const updatedPersona: Persona = req.body;
     if (!updatedPersona.name || !updatedPersona.title) {
@@ -372,17 +581,18 @@ async function startServer() {
       return;
     }
     persona = { ...persona, ...updatedPersona };
-    writeJsonFile(PERSONA_FILE, persona);
+    await savePersonaToFirestore(persona);
     res.json(persona);
   });
 
   // API - Authorized Emails (Whitelist)
-  app.get("/api/emails", (req, res) => {
+  app.get("/api/emails", async (req, res) => {
     if (!verifyAdmin(req, res)) return;
+    allowedEmails = await loadAllowedEmails();
     res.json(allowedEmails);
   });
 
-  app.post("/api/emails", (req, res) => {
+  app.post("/api/emails", async (req, res) => {
     if (!verifyAdmin(req, res)) return;
     const { email } = req.body;
     if (!email || typeof email !== "string") {
@@ -390,36 +600,71 @@ async function startServer() {
       return;
     }
     const normalized = email.trim().toLowerCase();
+    allowedEmails = await loadAllowedEmails();
     if (!allowedEmails.includes(normalized)) {
       allowedEmails.push(normalized);
-      writeJsonFile(EMAILS_FILE, allowedEmails);
+      await saveAllowedEmailsToFirestore(allowedEmails);
     }
     res.json({ success: true, emails: allowedEmails });
   });
 
-  app.delete("/api/emails/:email", (req, res) => {
+  app.delete("/api/emails/:email", async (req, res) => {
     if (!verifyAdmin(req, res)) return;
     const { email } = req.params;
     const normalized = email.trim().toLowerCase();
+    allowedEmails = await loadAllowedEmails();
     allowedEmails = allowedEmails.filter((e) => e !== normalized);
-    writeJsonFile(EMAILS_FILE, allowedEmails);
+    await saveAllowedEmailsToFirestore(allowedEmails);
     res.json({ success: true, emails: allowedEmails });
   });
 
   // API - Auth Login Simulation
-  app.post("/api/auth/login", (req, res) => {
+  app.post("/api/auth/login", async (req, res) => {
     const { email } = req.body;
     if (!email || typeof email !== "string") {
       res.status(400).json({ error: "Email parameter is required." });
       return;
     }
     const normalized = email.trim().toLowerCase();
+    allowedEmails = await loadAllowedEmails();
     const isAllowed = allowedEmails.includes(normalized);
     res.json({
       success: isAllowed,
       email: normalized,
       isAdmin: normalized === "ogungbadekehinde19@gmail.com"
     });
+  });
+
+  // API - Chats Persistence
+  app.get("/api/chats", async (req, res) => {
+    const { email } = req.query;
+    if (!email || typeof email !== "string") {
+      res.status(400).json({ error: "Email query parameter is required." });
+      return;
+    }
+    const userChats = await loadUserChats(email);
+    res.json(userChats);
+  });
+
+  app.post("/api/chats", async (req, res) => {
+    const { email, session } = req.body;
+    if (!email || typeof email !== "string" || !session || !session.id) {
+      res.status(400).json({ error: "Email and session details are required." });
+      return;
+    }
+    await saveUserChatSession(email, session);
+    res.json({ success: true });
+  });
+
+  app.delete("/api/chats/:id", async (req, res) => {
+    const { id } = req.params;
+    const { email } = req.query;
+    if (!email || typeof email !== "string") {
+      res.status(400).json({ error: "Email query parameter is required." });
+      return;
+    }
+    await deleteUserChatSession(email, id);
+    res.json({ success: true });
   });
 
   // API - Chat with Persona (the AI Clone)

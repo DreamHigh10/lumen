@@ -44,6 +44,8 @@ export default function App() {
     }
   });
 
+  const prevSessionsRef = React.useRef<ChatSession[]>([]);
+
   const safeSaveSessions = (sessionsList: ChatSession[]) => {
     try {
       localStorage.setItem("luma_chat_sessions", JSON.stringify(sessionsList));
@@ -67,6 +69,30 @@ export default function App() {
     }
   };
 
+  const syncSessionToServer = async (session: ChatSession) => {
+    if (!userEmail) return;
+    try {
+      await fetch("/api/chats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: userEmail, session }),
+      });
+    } catch (err) {
+      console.warn("Error syncing session to server:", err);
+    }
+  };
+
+  const deleteSessionFromServer = async (sessionId: string) => {
+    if (!userEmail) return;
+    try {
+      await fetch(`/api/chats/${sessionId}?email=${encodeURIComponent(userEmail)}`, {
+        method: "DELETE",
+      });
+    } catch (err) {
+      console.warn("Error deleting session on server:", err);
+    }
+  };
+
   useEffect(() => {
     try {
       if (theme === "light") {
@@ -84,10 +110,27 @@ export default function App() {
 
   // Unified sessions persistence whenever sessions change
   useEffect(() => {
-    if (isAuthenticated) {
-      safeSaveSessions(sessions);
+    if (!isAuthenticated || !userEmail) return;
+
+    // Detect session additions or modifications
+    for (const session of sessions) {
+      const prev = prevSessionsRef.current.find((s) => s.id === session.id);
+      if (!prev || JSON.stringify(prev) !== JSON.stringify(session)) {
+        syncSessionToServer(session);
+      }
     }
-  }, [sessions, isAuthenticated]);
+
+    // Detect session deletions
+    for (const prev of prevSessionsRef.current) {
+      const current = sessions.find((s) => s.id === prev.id);
+      if (!current) {
+        deleteSessionFromServer(prev.id);
+      }
+    }
+
+    prevSessionsRef.current = sessions;
+    safeSaveSessions(sessions);
+  }, [sessions, isAuthenticated, userEmail]);
 
   useEffect(() => {
     // Check local storage for persistent whitelisted session
@@ -105,28 +148,46 @@ export default function App() {
     }
   }, [isAuthenticated, personaUpdatedSignal]);
 
-  // Load chat sessions on authentication
+  // Load chat sessions on authentication from server with local storage fallback
   useEffect(() => {
-    if (isAuthenticated) {
-      const savedSessions = localStorage.getItem("luma_chat_sessions");
-      if (savedSessions) {
+    if (isAuthenticated && userEmail) {
+      const loadSessionsFromServer = async () => {
         try {
-          const parsed = JSON.parse(savedSessions);
-          if (Array.isArray(parsed)) {
-            setSessions(parsed);
-            if (parsed.length > 0) {
-              setActiveSessionId(parsed[0].id);
+          const res = await fetch(`/api/chats?email=${encodeURIComponent(userEmail)}`);
+          if (res.ok) {
+            const serverSessions = await res.json();
+            if (Array.isArray(serverSessions) && serverSessions.length > 0) {
+              setSessions(serverSessions);
+              prevSessionsRef.current = serverSessions;
+              setActiveSessionId(serverSessions[0].id);
+              return;
             }
-          } else {
-            setSessions([]);
           }
         } catch (err) {
-          console.error("Failed to load past sessions", err);
-          setSessions([]);
+          console.error("Failed to load sessions from server:", err);
         }
-      }
+
+        // Fallback to local storage if server is empty or fails
+        const savedSessions = localStorage.getItem("luma_chat_sessions");
+        if (savedSessions) {
+          try {
+            const parsed = JSON.parse(savedSessions);
+            if (Array.isArray(parsed)) {
+              setSessions(parsed);
+              prevSessionsRef.current = parsed;
+              if (parsed.length > 0) {
+                setActiveSessionId(parsed[0].id);
+              }
+            }
+          } catch (err) {
+            console.error("Failed to load past sessions from cache:", err);
+          }
+        }
+      };
+
+      loadSessionsFromServer();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, userEmail]);
 
   const verifySavedEmail = async (email: string) => {
     try {
