@@ -1,0 +1,61 @@
+{
+  "entities": {
+    "Transcript": {
+      "title": "Transcript",
+      "description": "A transcript of a taught class.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "date": { "type": "string" },
+        "tags": { "type": "array" },
+        "summary": { "type": "string" },
+        "content": { "type": "string" }
+      },
+      "required": ["id", "title", "content"]
+    },
+    "Persona": {
+      "title": "Persona",
+      "description": "Config for the AI clone.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "title": { "type": "string" },
+        "toneKeywords": { "type": "array" },
+        "catchphrases": { "type": "array" },
+        "philosophy": { "type": "string" },
+        "bio": { "type": "string" },
+        "customInstructions": { "type": "string" }
+      },
+      "required": ["name", "title"]
+    },
+    "ChatSession": {
+      "title": "ChatSession",
+      "description": "A saved user chat session.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "messages": { "type": "array" },
+        "email": { "type": "string" }
+      },
+      "required": ["id", "email"]
+    }
+  },
+  "firestore": {
+    "transcripts/{transcriptId}": {
+      "schema": "Transcript",
+      "description": "Transcripts of classes"
+    },
+    "configs/{configId}": {
+      "schema": "Persona",
+      "description": "Configurations like persona and emails list"
+    },
+    "chats/{chatId}": {
+      "schema": "ChatSession",
+      "description": "Saved user chat sessions"
+    }
+  }
+}

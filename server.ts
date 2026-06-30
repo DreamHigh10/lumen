@@ -349,7 +349,7 @@ async function generateContentWithGroq(params: { contents: any; config?: any }) 
     throw new Error("GROQ_API_KEY environment variable is not set. Cannot perform Groq fallback.");
   }
 
-  console.log("[LUMEN API] Fallback: Initiating request to Groq (openai/gpt-oss-120b)...");
+  console.log("[LUMEN API] Fallback: Initiating request to Groq (llama-3.3-70b-versatile)...");
 
   // Map contents and configuration to OpenAI-compatible messages for Groq
   const groqMessages: any[] = [];
@@ -397,12 +397,11 @@ async function generateContentWithGroq(params: { contents: any; config?: any }) 
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "openai/gpt-oss-120b",
+      model: "llama-3.3-70b-versatile",
       messages: groqMessages,
       temperature: temperature,
-      max_completion_tokens: 8192,
+      max_tokens: 4096,
       top_p: 1,
-      reasoning_effort: "medium",
       ...(isJson ? { response_format: { type: "json_object" } } : {}),
     }),
   });
@@ -424,7 +423,7 @@ async function generateContentWithGroq(params: { contents: any; config?: any }) 
 
 // Robust Gemini content generation helper with transient-error retry and model fallback
 async function generateContentWithRetry(ai: any, params: { model: string; contents: any; config?: any }) {
-  const modelsToTry = [params.model, "gemini-flash-latest", "gemini-3.5-flash"];
+  const modelsToTry = [params.model, "gemini-3.5-flash", "gemini-2.5-flash", "gemini-flash-latest"];
   // Deduplicate and filter out undefined or falsy
   const uniqueModels = Array.from(new Set(modelsToTry.filter(Boolean)));
   
@@ -436,7 +435,7 @@ async function generateContentWithRetry(ai: any, params: { model: string; conten
     let timeoutId: any;
     const timeoutPromise = new Promise((_, reject) => {
       timeoutId = setTimeout(() => {
-        reject(new Error("Gemini API call timed out after 15 seconds"));
+        reject(new Error("Gemini API call timed out after 120 seconds"));
       }, ms);
     });
     try {
@@ -459,7 +458,7 @@ async function generateContentWithRetry(ai: any, params: { model: string; conten
             ...params,
             model: model,
           }),
-          15000
+          120000
         );
         return response;
       } catch (err: any) {
@@ -783,7 +782,12 @@ ${transcriptsContext}
 
       // Formulate content parts for the Gemini API call
       // We convert the incoming simple message objects to the format required by the SDK
-      const contents = messages.map((m: any) => {
+      // We also normalize them to ensure roles strictly alternate between 'user' and 'model'
+      const normalizedContents: any[] = [];
+      let currentItem: any = null;
+
+      for (const m of messages) {
+        const role = m.role === "user" ? "user" : "model";
         const parts: any[] = [{ text: m.text || "Deconstruct this snapshot/image." }];
         
         if (m.image && m.image.base64 && m.image.mimeType) {
@@ -797,17 +801,30 @@ ${transcriptsContext}
             }
           });
         }
-        
-        return {
-          role: m.role === "user" ? "user" : "model",
-          parts: parts,
-        };
-      });
+
+        if (!currentItem) {
+          currentItem = { role, parts };
+        } else if (currentItem.role === role) {
+          // Merge parts into current item if same role
+          currentItem.parts.push(...parts);
+        } else {
+          normalizedContents.push(currentItem);
+          currentItem = { role, parts };
+        }
+      }
+      if (currentItem) {
+        normalizedContents.push(currentItem);
+      }
+
+      // Gemini requires the conversation to start with 'user'
+      if (normalizedContents.length > 0 && normalizedContents[0].role !== "user") {
+        normalizedContents[0].role = "user";
+      }
 
       // Call Gemini API with robust retry and fallback
       const response = await generateContentWithRetry(ai, {
         model: "gemini-3.5-flash",
-        contents: contents,
+        contents: normalizedContents,
         config: {
           systemInstruction: systemInstruction,
           temperature: 0.8,
