@@ -144,16 +144,17 @@ try {
 
 // Core async loaders for Firestore / Fallback
 async function loadTranscripts(): Promise<Transcript[]> {
+  const localTranscripts = readJsonFile<Transcript[]>(TRANSCRIPTS_FILE, DEFAULT_TRANSCRIPTS);
   if (db) {
     try {
       const colRef = collection(db, "transcripts");
       const snapshot = await getDocs(colRef);
       if (snapshot.empty) {
-        console.log("[LUMEN API] Firestore transcripts empty. Seeding defaults...");
-        for (const t of DEFAULT_TRANSCRIPTS) {
+        console.log("[LUMEN API] Firestore transcripts empty. Seeding from local file...");
+        for (const t of localTranscripts) {
           await setDoc(doc(db, "transcripts", t.id), t);
         }
-        return DEFAULT_TRANSCRIPTS;
+        return localTranscripts;
       }
       const list: Transcript[] = [];
       snapshot.forEach((docSnap) => {
@@ -165,36 +166,44 @@ async function loadTranscripts(): Promise<Transcript[]> {
       console.error("[LUMEN API] Error loading transcripts from Firestore, falling back to JSON:", err);
     }
   }
-  return readJsonFile<Transcript[]>(TRANSCRIPTS_FILE, DEFAULT_TRANSCRIPTS);
+  return localTranscripts;
 }
 
 async function saveTranscriptToFirestore(t: Transcript): Promise<void> {
+  // Always update the in-memory/local database file for robust dual-persistence
+  if (!transcripts.some((existing) => existing.id === t.id)) {
+    transcripts.push(t);
+  } else {
+    transcripts = transcripts.map((existing) => (existing.id === t.id ? t : existing));
+  }
+  writeJsonFile(TRANSCRIPTS_FILE, transcripts);
+
   if (db) {
     try {
       await setDoc(doc(db, "transcripts", t.id), t);
       console.log(`[LUMEN API] Transcript ${t.id} saved to Firestore.`);
-      return;
     } catch (err) {
       console.error("[LUMEN API] Failed to save transcript to Firestore:", err);
     }
   }
-  writeJsonFile(TRANSCRIPTS_FILE, transcripts);
 }
 
 async function deleteTranscriptFromFirestore(id: string): Promise<void> {
+  transcripts = transcripts.filter((t) => t.id !== id);
+  writeJsonFile(TRANSCRIPTS_FILE, transcripts);
+
   if (db) {
     try {
       await deleteDoc(doc(db, "transcripts", id));
       console.log(`[LUMEN API] Transcript ${id} deleted from Firestore.`);
-      return;
     } catch (err) {
       console.error("[LUMEN API] Failed to delete transcript from Firestore:", err);
     }
   }
-  writeJsonFile(TRANSCRIPTS_FILE, transcripts);
 }
 
 async function loadPersona(): Promise<Persona> {
+  const localPersona = readJsonFile<Persona>(PERSONA_FILE, DEFAULT_PERSONA);
   if (db) {
     try {
       const docRef = doc(db, "configs", "persona");
@@ -202,31 +211,33 @@ async function loadPersona(): Promise<Persona> {
       if (docSnap.exists()) {
         return docSnap.data() as Persona;
       } else {
-        console.log("[LUMEN API] Firestore persona config not found. Seeding default...");
-        await setDoc(docRef, DEFAULT_PERSONA);
-        return DEFAULT_PERSONA;
+        console.log("[LUMEN API] Firestore persona config not found. Seeding from local...");
+        await setDoc(docRef, localPersona);
+        return localPersona;
       }
     } catch (err) {
       console.error("[LUMEN API] Error loading persona from Firestore, falling back to JSON:", err);
     }
   }
-  return readJsonFile<Persona>(PERSONA_FILE, DEFAULT_PERSONA);
+  return localPersona;
 }
 
 async function savePersonaToFirestore(p: Persona): Promise<void> {
+  persona = { ...persona, ...p };
+  writeJsonFile(PERSONA_FILE, persona);
+
   if (db) {
     try {
       await setDoc(doc(db, "configs", "persona"), p);
       console.log("[LUMEN API] Persona configuration saved to Firestore.");
-      return;
     } catch (err) {
       console.error("[LUMEN API] Failed to save persona to Firestore:", err);
     }
   }
-  writeJsonFile(PERSONA_FILE, persona);
 }
 
 async function loadAllowedEmails(): Promise<string[]> {
+  const localEmails = readJsonFile<string[]>(EMAILS_FILE, DEFAULT_EMAILS);
   if (db) {
     try {
       const docRef = doc(db, "configs", "emails");
@@ -237,28 +248,29 @@ async function loadAllowedEmails(): Promise<string[]> {
           return data.list;
         }
       } else {
-        console.log("[LUMEN API] Firestore allowed emails config not found. Seeding defaults...");
-        await setDoc(docRef, { list: DEFAULT_EMAILS });
-        return DEFAULT_EMAILS;
+        console.log("[LUMEN API] Firestore allowed emails config not found. Seeding from local...");
+        await setDoc(docRef, { list: localEmails });
+        return localEmails;
       }
     } catch (err) {
       console.error("[LUMEN API] Error loading allowed emails from Firestore, falling back to JSON:", err);
     }
   }
-  return readJsonFile<string[]>(EMAILS_FILE, DEFAULT_EMAILS);
+  return localEmails;
 }
 
 async function saveAllowedEmailsToFirestore(list: string[]): Promise<void> {
+  allowedEmails = list;
+  writeJsonFile(EMAILS_FILE, allowedEmails);
+
   if (db) {
     try {
       await setDoc(doc(db, "configs", "emails"), { list });
       console.log("[LUMEN API] Whitelisted emails saved to Firestore.");
-      return;
     } catch (err) {
       console.error("[LUMEN API] Failed to save allowed emails to Firestore:", err);
     }
   }
-  writeJsonFile(EMAILS_FILE, allowedEmails);
 }
 
 async function loadUserChats(email: string): Promise<ChatSession[]> {
